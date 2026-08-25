@@ -1,0 +1,88 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+
+export type SerializedSale = {
+  id: string;
+  itemId: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  note: string | null;
+  createdAt: Date;
+  item: { name: string; size: string | null; color: string | null };
+};
+
+export async function getSales(limit?: number): Promise<SerializedSale[]> {
+  const sales = await prisma.sale.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: { item: true },
+  });
+
+  return sales.map((sale) => ({
+    id: sale.id,
+    itemId: sale.itemId,
+    quantity: sale.quantity,
+    unitPrice: Number(sale.unitPrice),
+    total: Number(sale.total),
+    note: sale.note,
+    createdAt: sale.createdAt,
+    item: { name: sale.item.name, size: sale.item.size, color: sale.item.color },
+  }));
+}
+
+export async function createSale(formData: FormData) {
+  const itemId = String(formData.get("itemId") ?? "");
+  const quantity = Number(formData.get("quantity") ?? 0);
+  const unitPrice = Number(formData.get("unitPrice") ?? 0);
+  const note = String(formData.get("note") ?? "").trim() || null;
+
+  if (!itemId) throw new Error("Item is required");
+  if (!Number.isInteger(quantity) || quantity <= 0) throw new Error("Invalid quantity");
+  if (Number.isNaN(unitPrice) || unitPrice < 0) throw new Error("Invalid unit price");
+
+  await prisma.$transaction(async (tx) => {
+    const item = await tx.item.findUnique({ where: { id: itemId } });
+    if (!item) throw new Error("Item not found");
+    if (item.quantity < quantity) throw new Error("Not enough stock");
+
+    await tx.item.update({
+      where: { id: itemId },
+      data: { quantity: item.quantity - quantity },
+    });
+
+    await tx.sale.create({
+      data: {
+        itemId,
+        quantity,
+        unitPrice,
+        total: unitPrice * quantity,
+        note,
+      },
+    });
+  });
+
+  revalidatePath("/sales");
+  revalidatePath("/items");
+  revalidatePath("/");
+}
+
+export async function deleteSale(id: string) {
+  await prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findUnique({ where: { id } });
+    if (!sale) return;
+
+    await tx.item.update({
+      where: { id: sale.itemId },
+      data: { quantity: { increment: sale.quantity } },
+    });
+
+    await tx.sale.delete({ where: { id } });
+  });
+
+  revalidatePath("/sales");
+  revalidatePath("/items");
+  revalidatePath("/");
+}

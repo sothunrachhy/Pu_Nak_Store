@@ -1,0 +1,180 @@
+"use client";
+
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+
+export type Lang = "en" | "km";
+
+export const dictionary = {
+  en: {
+    appName: "Stock Manager",
+    dashboard: "Dashboard",
+    items: "Items",
+    sales: "Sales",
+    expenses: "Expenses",
+    logout: "Log out",
+    login: "Log in",
+    password: "Password",
+    loginButton: "Enter",
+    loginError: "Incorrect password",
+    todayIncome: "Today's Income",
+    todayExpense: "Today's Expenses",
+    todayProfit: "Today's Profit",
+    thisWeek: "This Week",
+    thisMonth: "This Month",
+    income: "Income",
+    expense: "Expenses",
+    profit: "Profit",
+    lowStock: "Low Stock",
+    lowStockDesc: "Items with 3 or fewer in stock",
+    recentSales: "Recent Sales",
+    noSales: "No sales yet",
+    addItem: "Add Item",
+    editItem: "Edit Item",
+    itemName: "Item Name",
+    category: "Category",
+    size: "Size",
+    color: "Color",
+    costPrice: "Cost Price",
+    sellPrice: "Sell Price",
+    quantity: "Quantity",
+    inStock: "In Stock",
+    actions: "Actions",
+    edit: "Edit",
+    delete: "Delete",
+    save: "Save",
+    cancel: "Cancel",
+    noItems: "No items yet. Add your first item.",
+    confirmDelete: "Are you sure you want to delete this?",
+    recordSale: "Record a Sale",
+    selectItem: "Select Item",
+    unitPrice: "Unit Price",
+    total: "Total",
+    note: "Note (optional)",
+    recordSaleButton: "Record Sale",
+    date: "Date",
+    item: "Item",
+    notEnoughStock: "Not enough stock",
+    addExpense: "Add Expense",
+    description: "Description",
+    amount: "Amount",
+    addExpenseButton: "Add Expense",
+    noExpenses: "No expenses recorded yet",
+    all: "All",
+    today: "Today",
+    week: "Week",
+    month: "Month",
+    requiredField: "This field is required",
+    saving: "Saving...",
+    currency: "$",
+  },
+  km: {
+    appName: "គ្រប់គ្រងស្តុក",
+    dashboard: "ទំព័រដើម",
+    items: "ទំនិញ",
+    sales: "លក់",
+    expenses: "ចំណាយ",
+    logout: "ចាកចេញ",
+    login: "ចូល",
+    password: "ពាក្យសម្ងាត់",
+    loginButton: "ចូល",
+    loginError: "ពាក្យសម្ងាត់មិនត្រឹមត្រូវ",
+    todayIncome: "ចំណូលថ្ងៃនេះ",
+    todayExpense: "ចំណាយថ្ងៃនេះ",
+    todayProfit: "ចំណេញថ្ងៃនេះ",
+    thisWeek: "សប្តាហ៍នេះ",
+    thisMonth: "ខែនេះ",
+    income: "ចំណូល",
+    expense: "ចំណាយ",
+    profit: "ចំណេញ",
+    lowStock: "ស្តុកជិតអស់",
+    lowStockDesc: "ទំនិញនៅសល់ ៣ ឬតិចជាង",
+    recentSales: "ការលក់ថ្មីៗ",
+    noSales: "មិនទាន់មានការលក់ទេ",
+    addItem: "បន្ថែមទំនិញ",
+    editItem: "កែសម្រួលទំនិញ",
+    itemName: "ឈ្មោះទំនិញ",
+    category: "ប្រភេទ",
+    size: "ទំហំ",
+    color: "ពណ៌",
+    costPrice: "តម្លៃដើម",
+    sellPrice: "តម្លៃលក់",
+    quantity: "ចំនួន",
+    inStock: "នៅសល់ក្នុងស្តុក",
+    actions: "សកម្មភាព",
+    edit: "កែសម្រួល",
+    delete: "លុប",
+    save: "រក្សាទុក",
+    cancel: "បោះបង់",
+    noItems: "មិនទាន់មានទំនិញទេ។ បន្ថែមទំនិញដំបូងរបស់អ្នក។",
+    confirmDelete: "តើអ្នកប្រាកដថាចង់លុបនេះមែនទេ?",
+    recordSale: "កត់ត្រាការលក់",
+    selectItem: "ជ្រើសរើសទំនិញ",
+    unitPrice: "តម្លៃឯកតា",
+    total: "សរុប",
+    note: "កំណត់ចំណាំ (មិនចាំបាច់)",
+    recordSaleButton: "កត់ត្រាការលក់",
+    date: "កាលបរិច្ឆេទ",
+    item: "ទំនិញ",
+    notEnoughStock: "ស្តុកមិនគ្រប់គ្រាន់",
+    addExpense: "បន្ថែមចំណាយ",
+    description: "សេចក្តីពិពណ៌នា",
+    amount: "ចំនួនទឹកប្រាក់",
+    addExpenseButton: "បន្ថែមចំណាយ",
+    noExpenses: "មិនទាន់មានចំណាយត្រូវបានកត់ត្រាទេ",
+    all: "ទាំងអស់",
+    today: "ថ្ងៃនេះ",
+    week: "សប្តាហ៍",
+    month: "ខែ",
+    requiredField: "ត្រូវការបំពេញកន្លែងនេះ",
+    saving: "កំពុងរក្សាទុក...",
+    currency: "$",
+  },
+} as const;
+
+export type TranslationKey = keyof typeof dictionary.en;
+
+type I18nContextValue = {
+  lang: Lang;
+  setLang: (lang: Lang) => void;
+  t: (key: TranslationKey) => string;
+};
+
+const I18nContext = createContext<I18nContextValue | undefined>(undefined);
+
+const STORAGE_KEY = "app_lang";
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [lang, setLangState] = useState<Lang>("en");
+
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY) as Lang | null;
+    if (stored === "en" || stored === "km") {
+      setLangState(stored);
+    }
+  }, []);
+
+  const setLang = (newLang: Lang) => {
+    setLangState(newLang);
+    localStorage.setItem(STORAGE_KEY, newLang);
+  };
+
+  const t = (key: TranslationKey) => dictionary[lang][key] ?? dictionary.en[key];
+
+  return (
+    <I18nContext.Provider value={{ lang, setLang, t }}>
+      {children}
+    </I18nContext.Provider>
+  );
+}
+
+export function useI18n() {
+  const ctx = useContext(I18nContext);
+  if (!ctx) throw new Error("useI18n must be used within I18nProvider");
+  return ctx;
+}

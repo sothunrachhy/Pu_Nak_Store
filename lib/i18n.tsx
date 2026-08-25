@@ -83,6 +83,8 @@ export const dictionary = {
     undo: "Undo",
     outOfStock: "Out of stock",
     sell: "Sell",
+    somethingWrong: "Something went wrong",
+    tryAgain: "Try Again",
   },
   km: {
     appName: "គ្រប់គ្រងស្តុក",
@@ -156,6 +158,8 @@ export const dictionary = {
     undo: "ត្រឡប់វិញ",
     outOfStock: "អស់ស្តុក",
     sell: "លក់",
+    somethingWrong: "មានបញ្ហាកើតឡើង",
+    tryAgain: "ព្យាយាមម្តងទៀត",
   },
 } as const;
 

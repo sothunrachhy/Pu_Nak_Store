@@ -21,6 +21,7 @@ export default function ExpensesView({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleSubmit = (formData: FormData) => {
     setError(null);
@@ -38,9 +39,14 @@ export default function ExpensesView({
   const confirmDelete = () => {
     if (!deleteTarget) return;
     const id = deleteTarget;
+    setDeleteError(null);
     startTransition(async () => {
-      await deleteExpense(id);
-      setDeleteTarget(null);
+      try {
+        await deleteExpense(id);
+        setDeleteTarget(null);
+      } catch (e) {
+        setDeleteError(e instanceof Error ? e.message : "Error");
+      }
     });
   };
 
@@ -125,7 +131,10 @@ export default function ExpensesView({
                 </p>
               </div>
               <button
-                onClick={() => setDeleteTarget(expense.id)}
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteTarget(expense.id);
+                }}
                 aria-label={t("delete")}
                 className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-danger/20 py-2 text-xs font-medium text-danger active:bg-danger-soft"
               >
@@ -143,8 +152,12 @@ export default function ExpensesView({
         confirmLabel={t("delete")}
         cancelLabel={t("cancel")}
         pending={pending}
+        error={deleteError}
         onConfirm={confirmDelete}
-        onCancel={() => setDeleteTarget(null)}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
       />
     </div>
   );

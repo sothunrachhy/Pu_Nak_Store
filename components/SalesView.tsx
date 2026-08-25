@@ -43,6 +43,7 @@ export default function SalesView({
   const [toastError, setToastError] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -80,9 +81,14 @@ export default function SalesView({
   const confirmDelete = () => {
     if (!deleteTarget) return;
     const id = deleteTarget;
+    setDeleteError(null);
     startTransition(async () => {
-      await deleteSale(id);
-      setDeleteTarget(null);
+      try {
+        await deleteSale(id);
+        setDeleteTarget(null);
+      } catch (e) {
+        setDeleteError(e instanceof Error ? e.message : "Error");
+      }
     });
   };
 
@@ -433,7 +439,10 @@ export default function SalesView({
                   </p>
                 </div>
                 <button
-                  onClick={() => setDeleteTarget(sale.id)}
+                  onClick={() => {
+                    setDeleteError(null);
+                    setDeleteTarget(sale.id);
+                  }}
                   aria-label={t("delete")}
                   className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-danger/20 py-2 text-xs font-medium text-danger active:bg-danger-soft"
                 >
@@ -477,8 +486,12 @@ export default function SalesView({
         confirmLabel={t("delete")}
         cancelLabel={t("cancel")}
         pending={pending}
+        error={deleteError}
         onConfirm={confirmDelete}
-        onCancel={() => setDeleteTarget(null)}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
       />
     </div>
   );

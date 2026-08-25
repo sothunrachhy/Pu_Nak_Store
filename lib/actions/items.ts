@@ -120,7 +120,19 @@ export async function updateItem(id: string, formData: FormData) {
 
 export async function deleteItem(id: string) {
   await requireAuth();
-  const item = await prisma.item.delete({ where: { id } });
+
+  let item;
+  try {
+    item = await prisma.item.delete({ where: { id } });
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("foreign key constraint")) {
+      throw new Error(
+        "This item has sales recorded against it and can't be deleted. Set its quantity to 0 instead to hide it from new sales."
+      );
+    }
+    throw e;
+  }
+
   if (item.image) {
     await deleteItemImage(item.image);
   }

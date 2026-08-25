@@ -30,6 +30,7 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
   const [imageData, setImageData] = useState<string | null>(null);
   const [imageBusy, setImageBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const openNew = () => {
@@ -90,9 +91,14 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
   const confirmDelete = () => {
     if (!deleteTarget) return;
     const id = deleteTarget;
+    setDeleteError(null);
     startTransition(async () => {
-      await deleteItem(id);
-      setDeleteTarget(null);
+      try {
+        await deleteItem(id);
+        setDeleteTarget(null);
+      } catch (e) {
+        setDeleteError(e instanceof Error ? e.message : "Error");
+      }
     });
   };
 
@@ -301,7 +307,10 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
                     <PencilIcon className="h-3.5 w-3.5" />
                   </button>
                   <button
-                    onClick={() => setDeleteTarget(item.id)}
+                    onClick={() => {
+                      setDeleteError(null);
+                      setDeleteTarget(item.id);
+                    }}
                     aria-label={t("delete")}
                     className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-danger/20 py-2 text-xs font-medium text-danger active:bg-danger-soft"
                   >
@@ -320,8 +329,12 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
         confirmLabel={t("delete")}
         cancelLabel={t("cancel")}
         pending={pending}
+        error={deleteError}
         onConfirm={confirmDelete}
-        onCancel={() => setDeleteTarget(null)}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
       />
     </div>
   );

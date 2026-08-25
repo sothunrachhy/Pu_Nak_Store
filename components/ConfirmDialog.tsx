@@ -8,6 +8,7 @@ export default function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   pending,
+  error,
   onConfirm,
   onCancel,
 }: {
@@ -16,6 +17,7 @@ export default function ConfirmDialog({
   confirmLabel: string;
   cancelLabel: string;
   pending?: boolean;
+  error?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -34,6 +36,7 @@ export default function ConfirmDialog({
           <WarningIcon className="h-5 w-5" />
         </div>
         <p className="text-sm text-ink">{message}</p>
+        {error && <p className="mt-3 text-sm text-danger">{error}</p>}
         <div className="mt-5 flex gap-3">
           <button type="button" onClick={onCancel} className="btn-secondary flex-1">
             {cancelLabel}

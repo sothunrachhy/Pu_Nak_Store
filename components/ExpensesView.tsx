@@ -53,8 +53,8 @@ export default function ExpensesView({
             <span className="text-sm font-medium text-ink">{t("amount")}</span>
             <input
               type="number"
-              step="0.01"
-              min="0.01"
+              step="1"
+              min="1"
               name="amount"
               required
               className="input"

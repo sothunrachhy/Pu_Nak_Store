@@ -181,7 +181,7 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
             <Field label={t("costPrice")}>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 min="0"
                 name="costPrice"
                 defaultValue={item?.costPrice ?? 0}
@@ -192,7 +192,7 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
             <Field label={t("sellPrice")}>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 min="0"
                 name="price"
                 defaultValue={item?.price ?? 0}

@@ -208,7 +208,7 @@ export default function SalesView({
                 <span className="text-sm font-medium text-ink">{t("unitPrice")}</span>
                 <input
                   type="number"
-                  step="0.01"
+                  step="1"
                   min={0}
                   name="unitPrice"
                   value={unitPrice}

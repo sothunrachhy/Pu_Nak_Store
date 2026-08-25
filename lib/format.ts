@@ -1,6 +1,8 @@
 export function formatMoney(value: number | string) {
   const n = typeof value === "string" ? Number(value) : value;
-  return `$${n.toFixed(2)}`;
+  const rounded = Math.round(n);
+  const sign = rounded < 0 ? "-" : "";
+  return `${sign}${Math.abs(rounded).toLocaleString("en-US")}៛`;
 }
 
 export function formatDate(date: Date | string, lang: "en" | "km") {

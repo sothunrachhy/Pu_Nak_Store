@@ -23,14 +23,12 @@ export async function proxy(request: NextRequest) {
   }
 
   const secret = process.env.APP_PASSWORD;
-  if (!secret) {
-    return NextResponse.next();
-  }
-
-  const expected = await sha256Hex(`session:${secret}`);
   const token = request.cookies.get(SESSION_COOKIE)?.value;
+  const expected = secret ? await sha256Hex(`session:${secret}`) : null;
 
-  if (token !== expected) {
+  // Fail closed: if the secret is missing/misconfigured, deny access rather
+  // than letting every request through unauthenticated.
+  if (!expected || token !== expected) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);

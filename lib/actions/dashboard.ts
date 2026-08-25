@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 function startOfDay(d: Date) {
   const x = new Date(d);
@@ -73,6 +74,7 @@ async function getLast7DaysIncome(now: Date) {
 }
 
 export async function getDashboardStats() {
+  await requireAuth();
   const now = new Date();
   const today = startOfDay(now);
   const week = startOfWeek(now);

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 const MAX_IMAGE_DATA_URL_LENGTH = 2_000_000; // ~1.5MB decoded, well above our resized-on-client images
 
@@ -41,25 +42,32 @@ function serializeItem(item: {
   };
 }
 
+const SAFE_IMAGE_PREFIXES = ["data:image/jpeg", "data:image/png", "data:image/webp"];
+
 function readImage(formData: FormData): string | null {
   const image = String(formData.get("image") ?? "").trim();
   if (!image) return null;
-  if (!image.startsWith("data:image/")) throw new Error("Invalid image");
+  if (!SAFE_IMAGE_PREFIXES.some((prefix) => image.startsWith(prefix))) {
+    throw new Error("Invalid image");
+  }
   if (image.length > MAX_IMAGE_DATA_URL_LENGTH) throw new Error("Image is too large");
   return image;
 }
 
 export async function getItems(): Promise<SerializedItem[]> {
+  await requireAuth();
   const items = await prisma.item.findMany({ orderBy: { name: "asc" } });
   return items.map(serializeItem);
 }
 
 export async function getItem(id: string): Promise<SerializedItem | null> {
+  await requireAuth();
   const item = await prisma.item.findUnique({ where: { id } });
   return item ? serializeItem(item) : null;
 }
 
 export async function createItem(formData: FormData) {
+  await requireAuth();
   const name = String(formData.get("name") ?? "").trim();
   const category = String(formData.get("category") ?? "").trim() || null;
   const size = String(formData.get("size") ?? "").trim() || null;
@@ -84,6 +92,7 @@ export async function createItem(formData: FormData) {
 }
 
 export async function updateItem(id: string, formData: FormData) {
+  await requireAuth();
   const name = String(formData.get("name") ?? "").trim();
   const category = String(formData.get("category") ?? "").trim() || null;
   const size = String(formData.get("size") ?? "").trim() || null;
@@ -109,6 +118,7 @@ export async function updateItem(id: string, formData: FormData) {
 }
 
 export async function deleteItem(id: string) {
+  await requireAuth();
   await prisma.item.delete({ where: { id } });
   revalidatePath("/items");
   revalidatePath("/sales");

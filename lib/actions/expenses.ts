@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 export type SerializedExpense = {
   id: string;
@@ -12,6 +13,7 @@ export type SerializedExpense = {
 };
 
 export async function getExpenses(limit?: number): Promise<SerializedExpense[]> {
+  await requireAuth();
   const expenses = await prisma.expense.findMany({
     orderBy: { createdAt: "desc" },
     take: limit,
@@ -27,6 +29,7 @@ export async function getExpenses(limit?: number): Promise<SerializedExpense[]> 
 }
 
 export async function createExpense(formData: FormData) {
+  await requireAuth();
   const description = String(formData.get("description") ?? "").trim();
   const amount = Number(formData.get("amount") ?? 0);
   const note = String(formData.get("note") ?? "").trim() || null;
@@ -41,6 +44,7 @@ export async function createExpense(formData: FormData) {
 }
 
 export async function deleteExpense(id: string) {
+  await requireAuth();
   await prisma.expense.delete({ where: { id } });
   revalidatePath("/expenses");
   revalidatePath("/");

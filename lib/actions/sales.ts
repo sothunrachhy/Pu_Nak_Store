@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 export type SerializedSale = {
   id: string;
@@ -17,6 +18,7 @@ export type SerializedSale = {
 };
 
 export async function getSales(limit?: number): Promise<SerializedSale[]> {
+  await requireAuth();
   const sales = await prisma.sale.findMany({
     orderBy: { createdAt: "desc" },
     take: limit,
@@ -43,6 +45,7 @@ export async function getSales(limit?: number): Promise<SerializedSale[]> {
 }
 
 export async function createSale(formData: FormData): Promise<{ id: string }> {
+  await requireAuth();
   const itemId = String(formData.get("itemId") ?? "");
   const quantity = Number(formData.get("quantity") ?? 0);
   const unitPrice = Number(formData.get("unitPrice") ?? 0);
@@ -85,6 +88,7 @@ export async function createSale(formData: FormData): Promise<{ id: string }> {
 }
 
 export async function deleteSale(id: string) {
+  await requireAuth();
   await prisma.$transaction(async (tx) => {
     const sale = await tx.sale.findUnique({ where: { id } });
     if (!sale) return;

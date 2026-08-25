@@ -8,6 +8,7 @@ import {
   deleteExpense,
   type SerializedExpense,
 } from "@/lib/actions/expenses";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { PlusIcon, TrashIcon, WalletIcon } from "@/components/icons";
 
 export default function ExpensesView({
@@ -19,6 +20,7 @@ export default function ExpensesView({
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const handleSubmit = (formData: FormData) => {
     setError(null);
@@ -33,10 +35,12 @@ export default function ExpensesView({
     });
   };
 
-  const handleDelete = (id: string) => {
-    if (!confirm(t("confirmDelete"))) return;
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget;
     startTransition(async () => {
       await deleteExpense(id);
+      setDeleteTarget(null);
     });
   };
 
@@ -121,7 +125,7 @@ export default function ExpensesView({
                 </p>
               </div>
               <button
-                onClick={() => handleDelete(expense.id)}
+                onClick={() => setDeleteTarget(expense.id)}
                 aria-label={t("delete")}
                 className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-danger/20 py-2 text-xs font-medium text-danger active:bg-danger-soft"
               >
@@ -132,6 +136,16 @@ export default function ExpensesView({
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        message={t("confirmDelete")}
+        confirmLabel={t("delete")}
+        cancelLabel={t("cancel")}
+        pending={pending}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

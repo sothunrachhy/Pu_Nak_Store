@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import { formatMoney, formatDate } from "@/lib/format";
 import { createSale, deleteSale, type SerializedSale } from "@/lib/actions/sales";
 import type { SerializedItem } from "@/lib/actions/items";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   CheckIcon,
   ImagePlaceholderIcon,
@@ -41,6 +42,7 @@ export default function SalesView({
   const [toast, setToast] = useState<Toast | null>(null);
   const [toastError, setToastError] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -75,10 +77,12 @@ export default function SalesView({
     });
   };
 
-  const handleDelete = (id: string) => {
-    if (!confirm(t("confirmDelete"))) return;
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget;
     startTransition(async () => {
       await deleteSale(id);
+      setDeleteTarget(null);
     });
   };
 
@@ -429,7 +433,7 @@ export default function SalesView({
                   </p>
                 </div>
                 <button
-                  onClick={() => handleDelete(sale.id)}
+                  onClick={() => setDeleteTarget(sale.id)}
                   aria-label={t("delete")}
                   className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-danger/20 py-2 text-xs font-medium text-danger active:bg-danger-soft"
                 >
@@ -466,6 +470,16 @@ export default function SalesView({
           {toastError === "Not enough stock" ? t("notEnoughStock") : toastError}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        message={t("confirmDelete")}
+        confirmLabel={t("delete")}
+        cancelLabel={t("cancel")}
+        pending={pending}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

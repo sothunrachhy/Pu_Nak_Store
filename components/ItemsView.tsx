@@ -12,6 +12,7 @@ import {
   type SerializedItem,
 } from "@/lib/actions/items";
 import { uploadItemImage } from "@/lib/actions/upload";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   CameraIcon,
   CloseIcon,
@@ -28,6 +29,7 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
   const [pending, startTransition] = useTransition();
   const [imageData, setImageData] = useState<string | null>(null);
   const [imageBusy, setImageBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const openNew = () => {
@@ -85,10 +87,12 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
     });
   };
 
-  const handleDelete = (id: string) => {
-    if (!confirm(t("confirmDelete"))) return;
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget;
     startTransition(async () => {
       await deleteItem(id);
+      setDeleteTarget(null);
     });
   };
 
@@ -297,7 +301,7 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
                     <PencilIcon className="h-3.5 w-3.5" />
                   </button>
                   <button
-                    onClick={() => handleDelete(item.id)}
+                    onClick={() => setDeleteTarget(item.id)}
                     aria-label={t("delete")}
                     className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-danger/20 py-2 text-xs font-medium text-danger active:bg-danger-soft"
                   >
@@ -309,6 +313,16 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        message={t("confirmDelete")}
+        confirmLabel={t("delete")}
+        cancelLabel={t("cancel")}
+        pending={pending}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

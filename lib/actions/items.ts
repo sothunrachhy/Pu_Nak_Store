@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-
-const MAX_IMAGE_DATA_URL_LENGTH = 2_000_000; // ~1.5MB decoded, well above our resized-on-client images
+import { deleteItemImage } from "@/lib/actions/upload";
+import { isOurBlobUrl } from "@/lib/blobUrl";
 
 export type SerializedItem = {
   id: string;
@@ -42,15 +42,10 @@ function serializeItem(item: {
   };
 }
 
-const SAFE_IMAGE_PREFIXES = ["data:image/jpeg", "data:image/png", "data:image/webp"];
-
 function readImage(formData: FormData): string | null {
   const image = String(formData.get("image") ?? "").trim();
   if (!image) return null;
-  if (!SAFE_IMAGE_PREFIXES.some((prefix) => image.startsWith(prefix))) {
-    throw new Error("Invalid image");
-  }
-  if (image.length > MAX_IMAGE_DATA_URL_LENGTH) throw new Error("Image is too large");
+  if (!isOurBlobUrl(image)) throw new Error("Invalid image");
   return image;
 }
 
@@ -107,10 +102,16 @@ export async function updateItem(id: string, formData: FormData) {
   if (Number.isNaN(price) || price < 0) throw new Error("Invalid sell price");
   if (Number.isNaN(quantity) || quantity < 0) throw new Error("Invalid quantity");
 
+  const previous = await prisma.item.findUnique({ where: { id }, select: { image: true } });
+
   await prisma.item.update({
     where: { id },
     data: { name, category, size, color, image, costPrice, price, quantity },
   });
+
+  if (previous?.image && previous.image !== image) {
+    await deleteItemImage(previous.image);
+  }
 
   revalidatePath("/items");
   revalidatePath("/sales");
@@ -119,7 +120,10 @@ export async function updateItem(id: string, formData: FormData) {
 
 export async function deleteItem(id: string) {
   await requireAuth();
-  await prisma.item.delete({ where: { id } });
+  const item = await prisma.item.delete({ where: { id } });
+  if (item.image) {
+    await deleteItemImage(item.image);
+  }
   revalidatePath("/items");
   revalidatePath("/sales");
   revalidatePath("/");

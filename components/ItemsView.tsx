@@ -11,6 +11,7 @@ import {
   deleteItem,
   type SerializedItem,
 } from "@/lib/actions/items";
+import { uploadItemImage } from "@/lib/actions/upload";
 import {
   CameraIcon,
   CloseIcon,
@@ -62,6 +63,15 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
     setError(null);
     startTransition(async () => {
       try {
+        // A freshly picked photo is still a raw data: URL at this point;
+        // upload it to blob storage first and swap in the permanent URL.
+        // An unchanged existing photo is already a blob URL and skips this.
+        const image = String(formData.get("image") ?? "");
+        if (image.startsWith("data:")) {
+          const uploadedUrl = await uploadItemImage(image);
+          formData.set("image", uploadedUrl);
+        }
+
         if (editing === "new") {
           await createItem(formData);
         } else if (editing) {

@@ -1,10 +1,24 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useI18n } from "@/lib/i18n";
 import { formatMoney, formatDate } from "@/lib/format";
 import { createSale, deleteSale, type SerializedSale } from "@/lib/actions/sales";
 import type { SerializedItem } from "@/lib/actions/items";
+import {
+  CheckIcon,
+  ImagePlaceholderIcon,
+  PlusIcon,
+  TrashIcon,
+} from "@/components/icons";
+
+type Toast = {
+  saleId: string;
+  itemName: string;
+  quantity: number;
+  total: number;
+};
 
 export default function SalesView({
   items,
@@ -20,6 +34,19 @@ export default function SalesView({
   const [unitPrice, setUnitPrice] = useState(items[0]?.price ?? 0);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const [quickPendingId, setQuickPendingId] = useState<string | null>(null);
+  const [stepperItemId, setStepperItemId] = useState<string | null>(null);
+  const [stepperQty, setStepperQty] = useState(1);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [toastError, setToastError] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   const selectedItem = useMemo(
     () => items.find((i) => i.id === itemId),
@@ -39,6 +66,7 @@ export default function SalesView({
     startTransition(async () => {
       try {
         await createSale(formData);
+        await new Promise((resolve) => setTimeout(resolve, 300));
         setShowForm(false);
         setQuantity(1);
       } catch (e) {
@@ -54,42 +82,117 @@ export default function SalesView({
     });
   };
 
+  const showToast = (t: Toast) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToastError(null);
+    setToast(t);
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  };
+
+  const handleQuickSell = async (item: SerializedItem, qty: number) => {
+    if (item.quantity < qty || quickPendingId) return;
+    setQuickPendingId(item.id);
+    setToastError(null);
+    const fd = new FormData();
+    fd.set("itemId", item.id);
+    fd.set("quantity", String(qty));
+    fd.set("unitPrice", String(item.price));
+    try {
+      const { id } = await createSale(fd);
+      showToast({ saleId: id, itemName: item.name, quantity: qty, total: item.price * qty });
+    } catch (e) {
+      setToastError(e instanceof Error ? e.message : "Error");
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToastError(null), 4000);
+    } finally {
+      setQuickPendingId(null);
+      setStepperItemId(null);
+    }
+  };
+
+  const handleUndo = () => {
+    if (!toast) return;
+    const saleId = toast.saleId;
+    setToast(null);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    startTransition(async () => {
+      await deleteSale(saleId);
+    });
+  };
+
+  const openStepper = (item: SerializedItem) => {
+    setStepperItemId(item.id);
+    setStepperQty(1);
+  };
+
   if (showForm) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-lg font-semibold font-khmer">{t("recordSale")}</h1>
+        <h1 className="font-heading text-lg font-semibold text-ink">{t("customSale")}</h1>
 
         {items.length === 0 ? (
-          <p className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-400 font-khmer">
-            {t("noItems")}
-          </p>
+          <p className="card p-6 text-center text-sm text-muted">{t("noItems")}</p>
         ) : (
           <form action={handleSubmit} className="flex flex-col gap-4">
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-gray-700 font-khmer">
+            <input type="hidden" name="itemId" value={itemId} />
+
+            <div>
+              <span className="mb-1.5 block text-sm font-medium text-ink">
                 {t("selectItem")}
               </span>
-              <select
-                name="itemId"
-                value={itemId}
-                onChange={(e) => handleItemChange(e.target.value)}
-                className="input"
-              >
-                {items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                    {item.size ? ` · ${item.size}` : ""}
-                    {item.color ? ` · ${item.color}` : ""} ({item.quantity} {t("inStock")})
-                  </option>
-                ))}
-              </select>
-            </label>
+              <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto rounded-xl border border-line bg-cream p-2">
+                {items.map((it) => {
+                  const selected = it.id === itemId;
+                  return (
+                    <li key={it.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleItemChange(it.id)}
+                        className={`flex w-full items-center gap-3 rounded-lg border p-2 text-left transition-colors ${
+                          selected
+                            ? "border-primary bg-surface ring-1 ring-primary"
+                            : "border-transparent bg-surface"
+                        }`}
+                      >
+                        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-line bg-cream">
+                          {it.image ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={it.image}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-line">
+                              <ImagePlaceholderIcon className="h-5 w-5" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-ink">
+                            {it.name}
+                            {it.size ? ` · ${it.size}` : ""}
+                            {it.color ? ` · ${it.color}` : ""}
+                          </p>
+                          <p className="text-xs text-muted">
+                            {formatMoney(it.price)} · {it.quantity} {t("inStock")}
+                          </p>
+                        </div>
+                        {selected && (
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-white">
+                            <CheckIcon className="h-3 w-3" />
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-gray-700 font-khmer">
-                  {t("quantity")}
-                </span>
+                <span className="text-sm font-medium text-ink">{t("quantity")}</span>
                 <input
                   type="number"
                   name="quantity"
@@ -102,9 +205,7 @@ export default function SalesView({
                 />
               </label>
               <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-gray-700 font-khmer">
-                  {t("unitPrice")}
-                </span>
+                <span className="text-sm font-medium text-ink">{t("unitPrice")}</span>
                 <input
                   type="number"
                   step="0.01"
@@ -119,19 +220,19 @@ export default function SalesView({
             </div>
 
             <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-gray-700 font-khmer">
-                {t("note")}
-              </span>
+              <span className="text-sm font-medium text-ink">{t("note")}</span>
               <input name="note" className="input" />
             </label>
 
-            <div className="rounded-xl bg-gray-100 p-4 text-center">
-              <p className="text-xs text-gray-500 font-khmer">{t("total")}</p>
-              <p className="text-2xl font-semibold">{formatMoney(total)}</p>
+            <div className="card bg-cream p-4 text-center">
+              <p className="text-xs text-muted">{t("total")}</p>
+              <p className="font-heading text-2xl font-semibold text-ink">
+                {formatMoney(total)}
+              </p>
             </div>
 
             {error && (
-              <p className="text-sm text-red-600 font-khmer">
+              <p className="text-sm text-danger">
                 {error === "Not enough stock" ? t("notEnoughStock") : error}
               </p>
             )}
@@ -140,15 +241,11 @@ export default function SalesView({
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="flex-1 rounded-lg border border-gray-300 py-3 text-base font-medium text-gray-700 active:bg-gray-100 font-khmer"
+                className="btn-secondary flex-1"
               >
                 {t("cancel")}
               </button>
-              <button
-                type="submit"
-                disabled={pending}
-                className="flex-1 rounded-lg bg-gray-900 py-3 text-base font-medium text-white active:bg-gray-800 disabled:opacity-60 font-khmer"
-              >
+              <button type="submit" disabled={pending} className="btn-primary flex-1">
                 {pending ? t("saving") : t("recordSaleButton")}
               </button>
             </div>
@@ -159,55 +256,215 @@ export default function SalesView({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold font-khmer">{t("sales")}</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white active:bg-gray-800 font-khmer"
-        >
-          + {t("recordSale")}
-        </button>
+        <h1 className="font-heading text-lg font-semibold text-ink">{t("sales")}</h1>
+        {items.length > 0 && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-1.5 text-xs font-medium text-ink active:bg-cream"
+          >
+            <PlusIcon className="h-3.5 w-3.5" />
+            {t("customSale")}
+          </button>
+        )}
       </div>
 
-      {sales.length === 0 ? (
-        <p className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-400 font-khmer">
-          {t("noSales")}
-        </p>
+      {items.length === 0 ? (
+        <div className="card flex flex-col items-center gap-3 p-6 text-center">
+          <p className="text-sm text-muted">{t("noItems")}</p>
+          <Link href="/items" className="btn-primary px-5 py-2.5 text-sm">
+            {t("addItem")}
+          </Link>
+        </div>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {sales.map((sale) => (
-            <li
-              key={sale.id}
-              className="rounded-2xl border border-gray-200 bg-white p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{sale.item.name}</p>
-                  <p className="text-xs text-gray-400">
-                    {[sale.item.size, sale.item.color].filter(Boolean).join(" · ")}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    {sale.quantity} × {formatMoney(sale.unitPrice)} ·{" "}
-                    {formatDate(sale.createdAt, lang)}
-                  </p>
-                  {sale.note && (
-                    <p className="mt-1 text-xs text-gray-500 italic">{sale.note}</p>
+        <section>
+          <p className="mb-0.5 text-sm font-medium text-muted">{t("quickSell")}</p>
+          <p className="mb-2 text-xs text-muted/80">{t("quickSellHint")}</p>
+          <ul className="grid grid-cols-3 gap-2">
+            {items.map((item) => {
+              const outOfStock = item.quantity === 0;
+              const isBusy = quickPendingId === item.id;
+              const inStepper = stepperItemId === item.id;
+
+              if (inStepper) {
+                return (
+                  <li key={item.id} className="card flex flex-col items-center gap-2 p-2">
+                    <p className="line-clamp-2 h-8 w-full text-center text-[11px] font-medium text-ink">
+                      {item.name}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setStepperQty((q) => Math.max(1, q - 1))}
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm font-semibold text-ink"
+                      >
+                        −
+                      </button>
+                      <span className="w-5 text-center text-sm font-semibold text-ink">
+                        {stepperQty}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setStepperQty((q) => Math.min(item.quantity, q + 1))
+                        }
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm font-semibold text-ink"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <div className="flex w-full gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setStepperItemId(null)}
+                        className="btn-secondary flex-1 px-1 py-1.5 text-[11px]"
+                      >
+                        {t("cancel")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleQuickSell(item, stepperQty)}
+                        className="btn-primary flex-1 px-1 py-1.5 text-[11px]"
+                      >
+                        {t("sell")}
+                      </button>
+                    </div>
+                  </li>
+                );
+              }
+
+              return (
+                <li key={item.id} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickSell(item, 1)}
+                    disabled={outOfStock || isBusy}
+                    className="card w-full overflow-hidden text-left transition-opacity disabled:opacity-50"
+                  >
+                    <div className="aspect-square w-full bg-cream">
+                      {item.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-line">
+                          <ImagePlaceholderIcon className="h-7 w-7" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2">
+                      <p className="truncate text-[11px] font-medium text-ink">
+                        {item.name}
+                      </p>
+                      <p className="text-[11px] font-semibold text-primary">
+                        {formatMoney(item.price)}
+                      </p>
+                    </div>
+                  </button>
+                  {outOfStock ? (
+                    <span className="absolute right-1.5 top-1.5 rounded-full bg-ink/80 px-2 py-0.5 text-[9px] font-medium text-white">
+                      {t("outOfStock")}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label={t("quantity")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openStepper(item);
+                      }}
+                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-line bg-surface/95 text-ink shadow-sm"
+                    >
+                      <PlusIcon className="h-3.5 w-3.5" />
+                    </button>
                   )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      <section>
+        <p className="mb-2 text-sm font-medium text-muted">{t("recentSales")}</p>
+        {sales.length === 0 ? (
+          <p className="card p-6 text-center text-sm text-muted">{t("noSales")}</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {sales.map((sale) => (
+              <li key={sale.id} className="card p-3">
+                <div className="flex items-start gap-3">
+                  <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-line bg-cream">
+                    {sale.item.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={sale.item.image}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-line">
+                        <ImagePlaceholderIcon className="h-5 w-5" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-ink">{sale.item.name}</p>
+                    <p className="text-xs text-muted">
+                      {[sale.item.size, sale.item.color].filter(Boolean).join(" · ")}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {sale.quantity} × {formatMoney(sale.unitPrice)} ·{" "}
+                      {formatDate(sale.createdAt, lang)}
+                    </p>
+                    {sale.note && <p className="mt-1 text-xs italic text-muted">{sale.note}</p>}
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold text-success">
+                    {formatMoney(sale.total)}
+                  </p>
                 </div>
-                <p className="shrink-0 text-lg font-semibold text-emerald-600">
-                  {formatMoney(sale.total)}
-                </p>
-              </div>
-              <button
-                onClick={() => handleDelete(sale.id)}
-                className="mt-3 w-full rounded-lg border border-red-200 py-2 text-sm font-medium text-red-600 active:bg-red-50 font-khmer"
-              >
-                {t("delete")}
-              </button>
-            </li>
-          ))}
-        </ul>
+                <button
+                  onClick={() => handleDelete(sale.id)}
+                  aria-label={t("delete")}
+                  className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-danger/20 py-2 text-xs font-medium text-danger active:bg-danger-soft"
+                >
+                  <TrashIcon className="h-3.5 w-3.5" />
+                  {t("delete")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {toast && (
+        <div className="fixed inset-x-4 bottom-24 z-30 mx-auto flex max-w-sm items-center justify-between gap-3 rounded-xl bg-ink px-4 py-3 text-white shadow-lg">
+          <span className="flex min-w-0 items-center gap-2 text-sm">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/20 text-success">
+              <CheckIcon className="h-3 w-3" />
+            </span>
+            <span className="truncate">
+              {t("sold")} {toast.quantity} × {toast.itemName} · {formatMoney(toast.total)}
+            </span>
+          </span>
+          <button
+            onClick={handleUndo}
+            className="shrink-0 text-sm font-semibold text-amber-300"
+          >
+            {t("undo")}
+          </button>
+        </div>
+      )}
+
+      {toastError && (
+        <div className="fixed inset-x-4 bottom-24 z-30 mx-auto max-w-sm rounded-xl bg-danger px-4 py-3 text-center text-sm text-white shadow-lg">
+          {toastError === "Not enough stock" ? t("notEnoughStock") : toastError}
+        </div>
       )}
     </div>
   );

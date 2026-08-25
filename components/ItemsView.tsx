@@ -1,24 +1,61 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useI18n } from "@/lib/i18n";
 import { formatMoney } from "@/lib/format";
+import { resizeImageFile } from "@/lib/image";
+import { CATEGORY_OPTIONS, SIZE_OPTIONS, COLOR_OPTIONS } from "@/lib/clothingOptions";
 import {
   createItem,
   updateItem,
   deleteItem,
   type SerializedItem,
 } from "@/lib/actions/items";
+import {
+  CameraIcon,
+  CloseIcon,
+  ImagePlaceholderIcon,
+  PencilIcon,
+  PlusIcon,
+  TrashIcon,
+} from "@/components/icons";
 
 export default function ItemsView({ items }: { items: SerializedItem[] }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [editing, setEditing] = useState<SerializedItem | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [imageData, setImageData] = useState<string | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const openNew = () => {
+    setImageData(null);
+    setEditing("new");
+  };
+
+  const openEdit = (item: SerializedItem) => {
+    setImageData(item.image);
+    setEditing(item);
+  };
 
   const closeForm = () => {
     setEditing(null);
     setError(null);
+    setImageData(null);
+  };
+
+  const handleImagePick = async (file: File | undefined) => {
+    if (!file) return;
+    setImageBusy(true);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      setImageData(dataUrl);
+    } catch {
+      setError("Could not process image");
+    } finally {
+      setImageBusy(false);
+    }
   };
 
   const handleSubmit = (formData: FormData) => {
@@ -30,6 +67,7 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
         } else if (editing) {
           await updateItem(editing.id, formData);
         }
+        await new Promise((resolve) => setTimeout(resolve, 300));
         closeForm();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Error");
@@ -49,10 +87,58 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
     const item = isNew ? null : editing;
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-lg font-semibold font-khmer">
+        <h1 className="font-heading text-lg font-semibold text-ink">
           {isNew ? t("addItem") : t("editItem")}
         </h1>
         <form action={handleSubmit} className="flex flex-col gap-4">
+          <input type="hidden" name="image" value={imageData ?? ""} />
+
+          <div className="flex flex-col items-center gap-2">
+            <div className="relative">
+              <div className="h-32 w-32 overflow-hidden rounded-2xl border border-line bg-cream">
+                {imageData ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={imageData}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-muted">
+                    <ImagePlaceholderIcon className="h-10 w-10" />
+                  </div>
+                )}
+              </div>
+              {imageData && (
+                <button
+                  type="button"
+                  onClick={() => setImageData(null)}
+                  aria-label={t("delete")}
+                  className="absolute -right-2 -top-2 rounded-full bg-ink p-1.5 text-white shadow"
+                >
+                  <CloseIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={imageBusy}
+              className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-1.5 text-xs font-medium text-ink active:bg-cream disabled:opacity-60"
+            >
+              <CameraIcon className="h-4 w-4" />
+              {imageBusy ? t("saving") : t("addPhoto")}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => handleImagePick(e.target.files?.[0])}
+            />
+          </div>
+
           <Field label={t("itemName")}>
             <input
               name="name"
@@ -62,16 +148,25 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t("category")}>
-              <input name="category" defaultValue={item?.category ?? ""} className="input" />
-            </Field>
-            <Field label={t("size")}>
-              <input name="size" defaultValue={item?.size ?? ""} className="input" />
-            </Field>
+            <SelectOrOtherField
+              name="category"
+              label={t("category")}
+              options={CATEGORY_OPTIONS[lang]}
+              initialValue={item?.category ?? null}
+            />
+            <SelectOrOtherField
+              name="size"
+              label={t("size")}
+              options={SIZE_OPTIONS[lang]}
+              initialValue={item?.size ?? null}
+            />
           </div>
-          <Field label={t("color")}>
-            <input name="color" defaultValue={item?.color ?? ""} className="input" />
-          </Field>
+          <SelectOrOtherField
+            name="color"
+            label={t("color")}
+            options={COLOR_OPTIONS[lang]}
+            initialValue={item?.color ?? null}
+          />
           <div className="grid grid-cols-2 gap-3">
             <Field label={t("costPrice")}>
               <input
@@ -108,20 +203,20 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
             />
           </Field>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-danger">{error}</p>}
 
           <div className="mt-2 flex gap-3">
             <button
               type="button"
               onClick={closeForm}
-              className="flex-1 rounded-lg border border-gray-300 py-3 text-base font-medium text-gray-700 active:bg-gray-100 font-khmer"
+              className="btn-secondary flex-1"
             >
               {t("cancel")}
             </button>
             <button
               type="submit"
-              disabled={pending}
-              className="flex-1 rounded-lg bg-gray-900 py-3 text-base font-medium text-white active:bg-gray-800 disabled:opacity-60 font-khmer"
+              disabled={pending || imageBusy}
+              className="btn-primary flex-1"
             >
               {pending ? t("saving") : t("save")}
             </button>
@@ -134,61 +229,71 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold font-khmer">{t("items")}</h1>
+        <h1 className="font-heading text-lg font-semibold text-ink">{t("items")}</h1>
         <button
-          onClick={() => setEditing("new")}
-          className="rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white active:bg-gray-800 font-khmer"
+          onClick={openNew}
+          className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-white active:bg-primary-dark"
         >
-          + {t("addItem")}
+          <PlusIcon className="h-4 w-4" />
+          {t("addItem")}
         </button>
       </div>
 
       {items.length === 0 ? (
-        <p className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-400 font-khmer">
-          {t("noItems")}
-        </p>
+        <p className="card p-6 text-center text-sm text-muted">{t("noItems")}</p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="grid grid-cols-2 gap-3">
           {items.map((item) => (
-            <li
-              key={item.id}
-              className="rounded-2xl border border-gray-200 bg-white p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{item.name}</p>
-                  <p className="text-xs text-gray-400">
-                    {[item.category, item.size, item.color].filter(Boolean).join(" · ")}
-                  </p>
-                  <p className="mt-1 text-sm">
-                    <span className="text-gray-500 font-khmer">{t("sellPrice")}: </span>
-                    <span className="font-medium">{formatMoney(item.price)}</span>
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p
-                    className={`text-lg font-semibold ${
-                      item.quantity <= 3 ? "text-amber-600" : "text-gray-900"
+            <li key={item.id} className="card overflow-hidden">
+              <div className="aspect-square w-full bg-cream">
+                {item.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-line">
+                    <ImagePlaceholderIcon className="h-9 w-9" />
+                  </div>
+                )}
+              </div>
+              <div className="p-3">
+                <p className="truncate text-sm font-semibold text-ink">{item.name}</p>
+                <p className="truncate text-xs text-muted">
+                  {[item.size, item.color].filter(Boolean).join(" · ") || "—"}
+                </p>
+                <div className="mt-1.5 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-ink">
+                    {formatMoney(item.price)}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      item.quantity <= 3
+                        ? "bg-warning-soft text-warning"
+                        : "bg-cream text-muted"
                     }`}
                   >
-                    {item.quantity}
-                  </p>
-                  <p className="text-xs text-gray-400 font-khmer">{t("inStock")}</p>
+                    {item.quantity} {t("inStock")}
+                  </span>
                 </div>
-              </div>
-              <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3">
-                <button
-                  onClick={() => setEditing(item)}
-                  className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 active:bg-gray-100 font-khmer"
-                >
-                  {t("edit")}
-                </button>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  className="flex-1 rounded-lg border border-red-200 py-2 text-sm font-medium text-red-600 active:bg-red-50 font-khmer"
-                >
-                  {t("delete")}
-                </button>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => openEdit(item)}
+                    aria-label={t("edit")}
+                    className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-line py-2 text-xs font-medium text-ink active:bg-cream"
+                  >
+                    <PencilIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    aria-label={t("delete")}
+                    className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-danger/20 py-2 text-xs font-medium text-danger active:bg-danger-soft"
+                  >
+                    <TrashIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             </li>
           ))}
@@ -201,8 +306,72 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-gray-700 font-khmer">{label}</span>
+      <span className="text-sm font-medium text-ink">{label}</span>
       {children}
     </label>
+  );
+}
+
+const OTHER = "__other__";
+
+function SelectOrOtherField({
+  name,
+  label,
+  options,
+  initialValue,
+}: {
+  name: string;
+  label: string;
+  options: readonly string[];
+  initialValue: string | null;
+}) {
+  const startsAsOther = !!initialValue && !options.includes(initialValue);
+  const [value, setValue] = useState(startsAsOther ? OTHER : initialValue ?? "");
+  const [otherValue, setOtherValue] = useState(startsAsOther ? initialValue ?? "" : "");
+  const isOther = value === OTHER;
+  const { t } = useI18n();
+
+  return (
+    <div className="flex flex-col gap-1.5" data-field={name}>
+      <span className="text-sm font-medium text-ink">{label}</span>
+      <input type="hidden" name={isOther ? undefined : name} value={value} />
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => setValue(opt)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+              value === opt
+                ? "border-primary bg-primary text-white"
+                : "border-line bg-surface text-ink active:bg-cream"
+            }`}
+          >
+            {opt}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setValue(OTHER)}
+          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+            isOther
+              ? "border-primary bg-primary text-white"
+              : "border-line bg-surface text-ink active:bg-cream"
+          }`}
+        >
+          {t("other")}
+        </button>
+      </div>
+      {isOther && (
+        <input
+          name={name}
+          value={otherValue}
+          onChange={(e) => setOtherValue(e.target.value)}
+          placeholder={t("other")}
+          autoFocus
+          className="input"
+        />
+      )}
+    </div>
   );
 }

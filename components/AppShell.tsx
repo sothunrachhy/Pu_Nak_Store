@@ -5,12 +5,13 @@ import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
 import { useI18n } from "@/lib/i18n";
 import { logoutAction } from "@/lib/actions/auth";
+import { HomeIcon, LogoutIcon, ReceiptIcon, TagIcon, WalletIcon } from "@/components/icons";
 
 const NAV_ITEMS = [
-  { href: "/", key: "dashboard", icon: "🏠" },
-  { href: "/items", key: "items", icon: "👕" },
-  { href: "/sales", key: "sales", icon: "🧾" },
-  { href: "/expenses", key: "expenses", icon: "💸" },
+  { href: "/", key: "dashboard", Icon: HomeIcon },
+  { href: "/items", key: "items", Icon: TagIcon },
+  { href: "/sales", key: "sales", Icon: ReceiptIcon },
+  { href: "/expenses", key: "expenses", Icon: WalletIcon },
 ] as const;
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -19,24 +20,22 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
-        <span className="text-lg font-semibold text-gray-900 font-khmer">
-          {t("appName")}
-        </span>
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-surface/90 px-4 py-3 backdrop-blur">
+        <span className="font-heading text-lg font-semibold text-ink">{t("appName")}</span>
         <div className="flex items-center gap-2">
-          <div className="flex overflow-hidden rounded-full border border-gray-300 text-xs">
+          <div className="flex overflow-hidden rounded-full border border-line text-xs">
             <button
               onClick={() => setLang("en")}
-              className={`px-2.5 py-1 ${
-                lang === "en" ? "bg-gray-900 text-white" : "bg-white text-gray-600"
+              className={`px-2.5 py-1 transition-colors ${
+                lang === "en" ? "bg-ink text-white" : "bg-surface text-muted"
               }`}
             >
               EN
             </button>
             <button
               onClick={() => setLang("km")}
-              className={`px-2.5 py-1 font-khmer ${
-                lang === "km" ? "bg-gray-900 text-white" : "bg-white text-gray-600"
+              className={`px-2.5 py-1 transition-colors ${
+                lang === "km" ? "bg-ink text-white" : "bg-surface text-muted"
               }`}
             >
               ខ្មែរ
@@ -45,35 +44,39 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <form action={logoutAction}>
             <button
               type="submit"
-              className="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-600 active:bg-gray-100"
+              aria-label={t("logout")}
+              className="flex items-center justify-center rounded-full border border-line p-2 text-muted active:bg-cream"
             >
-              {t("logout")}
+              <LogoutIcon className="h-4 w-4" />
             </button>
           </form>
         </div>
       </header>
 
-      <main className="flex-1 px-3 pb-24 pt-4 sm:px-6">
+      <main className="flex-1 px-3 pb-28 pt-4 sm:px-6">
         <div className="mx-auto w-full max-w-3xl">{children}</div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto flex max-w-3xl">
-          {NAV_ITEMS.map((navItem) => {
-            const active =
-              navItem.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(navItem.href);
+      <nav className="fixed inset-x-3 bottom-3 z-20 mx-auto max-w-sm rounded-2xl border border-line bg-surface/95 shadow-[0_8px_24px_rgba(42,33,24,0.12)] backdrop-blur pb-[env(safe-area-inset-bottom)]">
+        <div className="flex">
+          {NAV_ITEMS.map(({ href, key, Icon }) => {
+            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (
               <Link
-                key={navItem.href}
-                href={navItem.href}
-                className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-xs font-khmer ${
-                  active ? "text-gray-900 font-medium" : "text-gray-400"
-                }`}
+                key={href}
+                href={href}
+                className="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-xs"
               >
-                <span className="text-xl leading-none">{navItem.icon}</span>
-                {t(navItem.key)}
+                <span
+                  className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                    active ? "bg-primary text-white" : "text-muted"
+                  }`}
+                >
+                  <Icon className="h-4.5 w-4.5" />
+                </span>
+                <span className={active ? "font-medium text-ink" : "text-muted"}>
+                  {t(key)}
+                </span>
               </Link>
             );
           })}

@@ -3,12 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
+const MAX_IMAGE_DATA_URL_LENGTH = 2_000_000; // ~1.5MB decoded, well above our resized-on-client images
+
 export type SerializedItem = {
   id: string;
   name: string;
   category: string | null;
   size: string | null;
   color: string | null;
+  image: string | null;
   costPrice: number;
   price: number;
   quantity: number;
@@ -20,6 +23,7 @@ function serializeItem(item: {
   category: string | null;
   size: string | null;
   color: string | null;
+  image: string | null;
   costPrice: unknown;
   price: unknown;
   quantity: number;
@@ -30,10 +34,19 @@ function serializeItem(item: {
     category: item.category,
     size: item.size,
     color: item.color,
+    image: item.image,
     costPrice: Number(item.costPrice),
     price: Number(item.price),
     quantity: item.quantity,
   };
+}
+
+function readImage(formData: FormData): string | null {
+  const image = String(formData.get("image") ?? "").trim();
+  if (!image) return null;
+  if (!image.startsWith("data:image/")) throw new Error("Invalid image");
+  if (image.length > MAX_IMAGE_DATA_URL_LENGTH) throw new Error("Image is too large");
+  return image;
 }
 
 export async function getItems(): Promise<SerializedItem[]> {
@@ -54,6 +67,7 @@ export async function createItem(formData: FormData) {
   const costPrice = Number(formData.get("costPrice") ?? 0);
   const price = Number(formData.get("price") ?? 0);
   const quantity = Number(formData.get("quantity") ?? 0);
+  const image = readImage(formData);
 
   if (!name) throw new Error("Item name is required");
   if (Number.isNaN(costPrice) || costPrice < 0) throw new Error("Invalid cost price");
@@ -61,7 +75,7 @@ export async function createItem(formData: FormData) {
   if (Number.isNaN(quantity) || quantity < 0) throw new Error("Invalid quantity");
 
   await prisma.item.create({
-    data: { name, category, size, color, costPrice, price, quantity },
+    data: { name, category, size, color, image, costPrice, price, quantity },
   });
 
   revalidatePath("/items");
@@ -77,6 +91,7 @@ export async function updateItem(id: string, formData: FormData) {
   const costPrice = Number(formData.get("costPrice") ?? 0);
   const price = Number(formData.get("price") ?? 0);
   const quantity = Number(formData.get("quantity") ?? 0);
+  const image = readImage(formData);
 
   if (!name) throw new Error("Item name is required");
   if (Number.isNaN(costPrice) || costPrice < 0) throw new Error("Invalid cost price");
@@ -85,7 +100,7 @@ export async function updateItem(id: string, formData: FormData) {
 
   await prisma.item.update({
     where: { id },
-    data: { name, category, size, color, costPrice, price, quantity },
+    data: { name, category, size, color, image, costPrice, price, quantity },
   });
 
   revalidatePath("/items");

@@ -23,10 +23,13 @@ function startOfMonth(d: Date) {
 
 async function sumSalesSince(since: Date) {
   const result = await prisma.sale.aggregate({
-    _sum: { total: true },
+    _sum: { total: true, costTotal: true },
     where: { createdAt: { gte: since } },
   });
-  return Number(result._sum.total ?? 0);
+  return {
+    income: Number(result._sum.total ?? 0),
+    cogs: Number(result._sum.costTotal ?? 0),
+  };
 }
 
 async function sumExpensesSince(since: Date) {
@@ -37,6 +40,38 @@ async function sumExpensesSince(since: Date) {
   return Number(result._sum.amount ?? 0);
 }
 
+function toPeriod(sales: { income: number; cogs: number }, expense: number) {
+  return {
+    income: sales.income,
+    cogs: sales.cogs,
+    expense,
+    profit: sales.income - sales.cogs - expense,
+  };
+}
+
+async function getLast7DaysIncome(now: Date) {
+  const start = startOfDay(now);
+  start.setDate(start.getDate() - 6);
+
+  const sales = await prisma.sale.findMany({
+    where: { createdAt: { gte: start } },
+    select: { createdAt: true, total: true },
+  });
+
+  const days: { date: Date; income: number }[] = [];
+  for (let i = 0; i < 7; i++) {
+    const dayStart = new Date(start);
+    dayStart.setDate(dayStart.getDate() + i);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    const income = sales
+      .filter((s) => s.createdAt >= dayStart && s.createdAt < dayEnd)
+      .reduce((sum, s) => sum + Number(s.total), 0);
+    days.push({ date: dayStart, income });
+  }
+  return days;
+}
+
 export async function getDashboardStats() {
   const now = new Date();
   const today = startOfDay(now);
@@ -44,14 +79,15 @@ export async function getDashboardStats() {
   const month = startOfMonth(now);
 
   const [
-    todayIncome,
+    todaySales,
     todayExpense,
-    weekIncome,
+    weekSales,
     weekExpense,
-    monthIncome,
+    monthSales,
     monthExpense,
     lowStockItems,
     recentSales,
+    last7Days,
   ] = await Promise.all([
     sumSalesSince(today),
     sumExpensesSince(today),
@@ -69,17 +105,20 @@ export async function getDashboardStats() {
       take: 5,
       include: { item: true },
     }),
+    getLast7DaysIncome(now),
   ]);
 
   return {
-    today: { income: todayIncome, expense: todayExpense, profit: todayIncome - todayExpense },
-    week: { income: weekIncome, expense: weekExpense, profit: weekIncome - weekExpense },
-    month: { income: monthIncome, expense: monthExpense, profit: monthIncome - monthExpense },
+    today: toPeriod(todaySales, todayExpense),
+    week: toPeriod(weekSales, weekExpense),
+    month: toPeriod(monthSales, monthExpense),
+    last7Days: last7Days.map((d) => ({ date: d.date.toISOString(), income: d.income })),
     lowStockItems: lowStockItems.map((item) => ({
       id: item.id,
       name: item.name,
       size: item.size,
       color: item.color,
+      image: item.image,
       quantity: item.quantity,
     })),
     recentSales: recentSales.map((sale) => ({
@@ -87,7 +126,7 @@ export async function getDashboardStats() {
       quantity: sale.quantity,
       total: Number(sale.total),
       createdAt: sale.createdAt,
-      item: { name: sale.item.name },
+      item: { name: sale.item.name, image: sale.item.image },
     })),
   };
 }

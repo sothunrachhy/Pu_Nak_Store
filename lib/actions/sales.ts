@@ -9,9 +9,11 @@ export type SerializedSale = {
   quantity: number;
   unitPrice: number;
   total: number;
+  costPrice: number;
+  costTotal: number;
   note: string | null;
   createdAt: Date;
-  item: { name: string; size: string | null; color: string | null };
+  item: { name: string; size: string | null; color: string | null; image: string | null };
 };
 
 export async function getSales(limit?: number): Promise<SerializedSale[]> {
@@ -27,13 +29,20 @@ export async function getSales(limit?: number): Promise<SerializedSale[]> {
     quantity: sale.quantity,
     unitPrice: Number(sale.unitPrice),
     total: Number(sale.total),
+    costPrice: Number(sale.costPrice),
+    costTotal: Number(sale.costTotal),
     note: sale.note,
     createdAt: sale.createdAt,
-    item: { name: sale.item.name, size: sale.item.size, color: sale.item.color },
+    item: {
+      name: sale.item.name,
+      size: sale.item.size,
+      color: sale.item.color,
+      image: sale.item.image,
+    },
   }));
 }
 
-export async function createSale(formData: FormData) {
+export async function createSale(formData: FormData): Promise<{ id: string }> {
   const itemId = String(formData.get("itemId") ?? "");
   const quantity = Number(formData.get("quantity") ?? 0);
   const unitPrice = Number(formData.get("unitPrice") ?? 0);
@@ -43,7 +52,7 @@ export async function createSale(formData: FormData) {
   if (!Number.isInteger(quantity) || quantity <= 0) throw new Error("Invalid quantity");
   if (Number.isNaN(unitPrice) || unitPrice < 0) throw new Error("Invalid unit price");
 
-  await prisma.$transaction(async (tx) => {
+  const sale = await prisma.$transaction(async (tx) => {
     const item = await tx.item.findUnique({ where: { id: itemId } });
     if (!item) throw new Error("Item not found");
     if (item.quantity < quantity) throw new Error("Not enough stock");
@@ -53,12 +62,16 @@ export async function createSale(formData: FormData) {
       data: { quantity: item.quantity - quantity },
     });
 
-    await tx.sale.create({
+    const costPrice = Number(item.costPrice);
+
+    return tx.sale.create({
       data: {
         itemId,
         quantity,
         unitPrice,
         total: unitPrice * quantity,
+        costPrice,
+        costTotal: costPrice * quantity,
         note,
       },
     });
@@ -67,6 +80,8 @@ export async function createSale(formData: FormData) {
   revalidatePath("/sales");
   revalidatePath("/items");
   revalidatePath("/");
+
+  return { id: sale.id };
 }
 
 export async function deleteSale(id: string) {

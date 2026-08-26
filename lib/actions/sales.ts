@@ -101,7 +101,9 @@ export async function createSale(
   }
 }
 
-export type BasketLine = { itemId: string; quantity: number };
+// unitPrice is the haggled price for this sale. Left out, the item's normal
+// price is used.
+export type BasketLine = { itemId: string; quantity: number; unitPrice?: number };
 
 // A customer buying several things is one basket, recorded in one
 // transaction: if any line lacks stock the whole thing rolls back, so the
@@ -115,6 +117,8 @@ export async function createSaleBatch(
     if (!line.itemId) return { error: "Item is required" };
     if (!Number.isInteger(line.quantity) || line.quantity <= 0)
       return { error: "Invalid quantity" };
+    if (line.unitPrice !== undefined && (!Number.isFinite(line.unitPrice) || line.unitPrice < 0))
+      return { error: "Invalid unit price" };
   }
 
   try {
@@ -131,7 +135,8 @@ export async function createSaleBatch(
         });
 
         const costPrice = Number(item.costPrice);
-        const unitPrice = Number(item.price);
+        // Trust the item's price unless this line was bargained down.
+        const unitPrice = line.unitPrice ?? Number(item.price);
         const sale = await tx.sale.create({
           data: {
             itemId: line.itemId,

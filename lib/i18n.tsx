@@ -98,8 +98,10 @@ export const dictionary = {
     basket: "Basket",
     clear: "Clear",
     add: "Add",
+    itemWord: "item",
     itemsWord: "items",
     searchItems: "Search items",
+    normalPrice: "Normal price",
   },
   km: {
     appName: "គ្រប់គ្រងស្តុក",
@@ -187,8 +189,10 @@ export const dictionary = {
     basket: "កន្ត្រក",
     clear: "សម្អាត",
     add: "បន្ថែម",
+    itemWord: "ទំនិញ",
     itemsWord: "ទំនិញ",
     searchItems: "ស្វែងរកទំនិញ",
+    normalPrice: "តម្លៃធម្មតា",
   },
 } as const;
 

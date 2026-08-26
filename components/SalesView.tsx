@@ -49,6 +49,9 @@ export default function SalesView({
   const [cart, setCart] = useState<Record<string, number>>({});
   const [basketOpen, setBasketOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // Prices bargained down for the basket in hand, per item. Absent means the
+  // item's normal price applies.
+  const [priceOverrides, setPriceOverrides] = useState<Record<string, number>>({});
   const [stepperItemId, setStepperItemId] = useState<string | null>(null);
   const [stepperQty, setStepperQty] = useState(1);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -75,10 +78,14 @@ export default function SalesView({
       Object.entries(cart)
         .map(([id, quantity]) => {
           const item = items.find((i) => i.id === id);
-          return item ? { item, quantity } : null;
+          if (!item) return null;
+          return { item, quantity, unitPrice: priceOverrides[id] ?? item.price };
         })
-        .filter((line): line is { item: SerializedItem; quantity: number } => line !== null),
-    [cart, items]
+        .filter(
+          (line): line is { item: SerializedItem; quantity: number; unitPrice: number } =>
+            line !== null
+        ),
+    [cart, items, priceOverrides]
   );
   // Quick Sell shows what is actually moving first, narrowed by the search
   // box. The Custom Sale picker keeps the full, name-ordered list.
@@ -98,7 +105,8 @@ export default function SalesView({
   }, [items, search]);
 
   const basketCount = basketLines.reduce((n, l) => n + l.quantity, 0);
-  const basketTotal = basketLines.reduce((n, l) => n + l.item.price * l.quantity, 0);
+  const basketCountLabel = `${basketCount} ${basketCount === 1 ? t("itemWord") : t("itemsWord")}`;
+  const basketTotal = basketLines.reduce((n, l) => n + l.unitPrice * l.quantity, 0);
 
   const handleItemChange = (id: string) => {
     setItemId(id);
@@ -158,20 +166,40 @@ export default function SalesView({
       else next[item.id] = clamped;
       return next;
     });
+    // A line removed from the basket should not keep its haggled price.
+    if (qty <= 0) {
+      setPriceOverrides((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+    }
+  };
+
+  const setLinePrice = (itemId: string, price: number) => {
+    setPriceOverrides((prev) => ({
+      ...prev,
+      [itemId]: Number.isFinite(price) && price >= 0 ? price : 0,
+    }));
   };
 
   const clearBasket = () => {
     setCart({});
+    setPriceOverrides({});
     setBasketOpen(false);
   };
 
   const recordBasket = () => {
     if (!basketLines.length || pending) return;
-    const lines = basketLines.map((l) => ({ itemId: l.item.id, quantity: l.quantity }));
+    const lines = basketLines.map((l) => ({
+      itemId: l.item.id,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+    }));
     const label =
       basketLines.length === 1
         ? `${basketLines[0].quantity} × ${basketLines[0].item.name}`
-        : `${basketCount} ${t("itemsWord")}`;
+        : basketCountLabel;
     const total = basketTotal;
 
     startTransition(async () => {
@@ -183,6 +211,7 @@ export default function SalesView({
         return;
       }
       setCart({});
+      setPriceOverrides({});
       setBasketOpen(false);
       showToast({ saleIds: result.ids, label, total });
     });
@@ -555,7 +584,7 @@ export default function SalesView({
               className="min-w-0 flex-1 text-left"
             >
               <span className="block text-[11px] text-white/60">
-                {t("basket")} · {basketCount} {t("itemsWord")}
+                {t("basket")} · {basketCountLabel}
               </span>
               <span className="block font-heading text-lg font-semibold">
                 {formatMoney(basketTotal)}
@@ -591,47 +620,68 @@ export default function SalesView({
             </div>
 
             <ul className="mb-3 flex max-h-72 flex-col gap-2 overflow-y-auto">
-              {basketLines.map(({ item, quantity }) => (
-                <li
-                  key={item.id}
-                  className="flex items-center gap-2 rounded-xl border border-line p-2"
-                >
-                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-line bg-cream">
-                    {item.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.image} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-line">
-                        <ImagePlaceholderIcon className="h-4 w-4" />
-                      </div>
-                    )}
+              {basketLines.map(({ item, quantity, unitPrice }) => (
+                <li key={item.id} className="rounded-xl border border-line p-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-line bg-cream">
+                      {item.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.image} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-line">
+                          <ImagePlaceholderIcon className="h-4 w-4" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
+                      {item.name}
+                    </p>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        aria-label={t("delete")}
+                        onClick={() => setBasketQty(item, quantity - 1)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm font-semibold text-ink"
+                      >
+                        −
+                      </button>
+                      <span className="w-5 text-center text-sm font-semibold text-ink">
+                        {quantity}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={t("add")}
+                        disabled={quantity >= item.quantity}
+                        onClick={() => setBasketQty(item, quantity + 1)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm font-semibold text-ink disabled:opacity-40"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium text-ink">{item.name}</p>
-                    <p className="text-xs text-muted">{formatMoney(item.price * quantity)}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <button
-                      type="button"
-                      aria-label={t("delete")}
-                      onClick={() => setBasketQty(item, quantity - 1)}
-                      className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm font-semibold text-ink"
-                    >
-                      −
-                    </button>
-                    <span className="w-5 text-center text-sm font-semibold text-ink">
-                      {quantity}
+
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      step={100}
+                      inputMode="numeric"
+                      aria-label={t("unitPrice")}
+                      value={unitPrice}
+                      onChange={(e) => setLinePrice(item.id, Number(e.target.value))}
+                      className="input w-24 px-2 py-1 text-xs"
+                    />
+                    <span className="text-xs text-muted">× {quantity}</span>
+                    <span className="ml-auto text-xs font-semibold text-ink">
+                      {formatMoney(unitPrice * quantity)}
                     </span>
-                    <button
-                      type="button"
-                      aria-label={t("add")}
-                      disabled={quantity >= item.quantity}
-                      onClick={() => setBasketQty(item, quantity + 1)}
-                      className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm font-semibold text-ink disabled:opacity-40"
-                    >
-                      +
-                    </button>
                   </div>
+
+                  {unitPrice !== item.price && (
+                    <p className="mt-1 text-[10px] text-muted">
+                      {t("normalPrice")}: {formatMoney(item.price)}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>

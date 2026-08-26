@@ -402,7 +402,7 @@ export default function SalesView({
         <section>
           <p className="mb-0.5 text-sm font-medium text-muted">{t("quickSell")}</p>
           <p className="mb-2 text-xs text-muted/80">{t("quickSellHint")}</p>
-          {categories.length > 1 && (
+          {categories.length > 0 && (
             <div className="-mx-3 mb-2 flex gap-1.5 overflow-x-auto px-3 pb-1">
               {[null, ...categories].map((option) => {
                 const selected = activeCategory === option;
@@ -437,7 +437,7 @@ export default function SalesView({
           {quickSellItems.length === 0 ? (
             <p className="card p-5 text-center text-sm text-muted">{t("noItems")}</p>
           ) : (
-          <ul className="grid grid-cols-3 gap-2">
+          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
             {quickSellItems.map((item) => {
               const outOfStock = item.quantity === 0;
               const inBasket = cart[item.id] ?? 0;

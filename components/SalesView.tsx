@@ -67,14 +67,14 @@ export default function SalesView({
   const handleSubmit = (formData: FormData) => {
     setError(null);
     startTransition(async () => {
-      try {
-        await createSale(formData);
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        setShowForm(false);
-        setQuantity(1);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Error");
+      const result = await createSale(formData);
+      if ("error" in result) {
+        setError(result.error);
+        return;
       }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      setShowForm(false);
+      setQuantity(1);
     });
   };
 
@@ -83,11 +83,11 @@ export default function SalesView({
     const id = deleteTarget;
     setDeleteError(null);
     startTransition(async () => {
-      try {
-        await deleteSale(id);
+      const result = await deleteSale(id);
+      if (result?.error) {
+        setDeleteError(result.error);
+      } else {
         setDeleteTarget(null);
-      } catch (e) {
-        setDeleteError(e instanceof Error ? e.message : "Error");
       }
     });
   };
@@ -107,17 +107,21 @@ export default function SalesView({
     fd.set("itemId", item.id);
     fd.set("quantity", String(qty));
     fd.set("unitPrice", String(item.price));
-    try {
-      const { id } = await createSale(fd);
-      showToast({ saleId: id, itemName: item.name, quantity: qty, total: item.price * qty });
-    } catch (e) {
-      setToastError(e instanceof Error ? e.message : "Error");
+    const result = await createSale(fd);
+    if ("error" in result) {
+      setToastError(result.error);
       if (toastTimer.current) clearTimeout(toastTimer.current);
       toastTimer.current = setTimeout(() => setToastError(null), 4000);
-    } finally {
-      setQuickPendingId(null);
-      setStepperItemId(null);
+    } else {
+      showToast({
+        saleId: result.id,
+        itemName: item.name,
+        quantity: qty,
+        total: item.price * qty,
+      });
     }
+    setQuickPendingId(null);
+    setStepperItemId(null);
   };
 
   const handleUndo = () => {

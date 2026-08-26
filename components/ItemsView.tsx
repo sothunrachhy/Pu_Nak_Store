@@ -65,26 +65,33 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
   const handleSubmit = (formData: FormData) => {
     setError(null);
     startTransition(async () => {
-      try {
-        // A freshly picked photo is still a raw data: URL at this point;
-        // upload it to blob storage first and swap in the permanent URL.
-        // An unchanged existing photo is already a blob URL and skips this.
-        const image = String(formData.get("image") ?? "");
-        if (image.startsWith("data:")) {
-          const uploadedUrl = await uploadItemImage(image);
-          formData.set("image", uploadedUrl);
+      // A freshly picked photo is still a raw data: URL at this point;
+      // upload it to blob storage first and swap in the permanent URL.
+      // An unchanged existing photo is already a blob URL and skips this.
+      const image = String(formData.get("image") ?? "");
+      if (image.startsWith("data:")) {
+        const uploadResult = await uploadItemImage(image);
+        if ("error" in uploadResult) {
+          setError(uploadResult.error);
+          return;
         }
-
-        if (editing === "new") {
-          await createItem(formData);
-        } else if (editing) {
-          await updateItem(editing.id, formData);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        closeForm();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Error");
+        formData.set("image", uploadResult.url);
       }
+
+      let result;
+      if (editing === "new") {
+        result = await createItem(formData);
+      } else if (editing) {
+        result = await updateItem(editing.id, formData);
+      }
+
+      if (result?.error) {
+        setError(result.error);
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      closeForm();
     });
   };
 
@@ -93,11 +100,11 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
     const id = deleteTarget;
     setDeleteError(null);
     startTransition(async () => {
-      try {
-        await deleteItem(id);
+      const result = await deleteItem(id);
+      if (result?.error) {
+        setDeleteError(result.error);
+      } else {
         setDeleteTarget(null);
-      } catch (e) {
-        setDeleteError(e instanceof Error ? e.message : "Error");
       }
     });
   };

@@ -26,13 +26,13 @@ export default function ExpensesView({
   const handleSubmit = (formData: FormData) => {
     setError(null);
     startTransition(async () => {
-      try {
-        await createExpense(formData);
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        setShowForm(false);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Error");
+      const result = await createExpense(formData);
+      if (result?.error) {
+        setError(result.error);
+        return;
       }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      setShowForm(false);
     });
   };
 
@@ -41,11 +41,11 @@ export default function ExpensesView({
     const id = deleteTarget;
     setDeleteError(null);
     startTransition(async () => {
-      try {
-        await deleteExpense(id);
+      const result = await deleteExpense(id);
+      if (result?.error) {
+        setDeleteError(result.error);
+      } else {
         setDeleteTarget(null);
-      } catch (e) {
-        setDeleteError(e instanceof Error ? e.message : "Error");
       }
     });
   };

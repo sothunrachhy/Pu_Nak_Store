@@ -18,6 +18,12 @@ export type SerializedItem = {
   quantity: number;
 };
 
+// Next.js redacts the .message of any thrown Error in production for
+// security, so user-facing validation/business errors must be returned as a
+// value instead of thrown - only truly unexpected errors should still throw
+// (those are caught by the app's error boundary).
+export type ActionResult = { error: string } | undefined;
+
 function serializeItem(item: {
   id: string;
   name: string;
@@ -42,11 +48,11 @@ function serializeItem(item: {
   };
 }
 
-function readImage(formData: FormData): string | null {
+function readImage(formData: FormData): { image: string | null } | { error: string } {
   const image = String(formData.get("image") ?? "").trim();
-  if (!image) return null;
-  if (!isOurBlobUrl(image)) throw new Error("Invalid image");
-  return image;
+  if (!image) return { image: null };
+  if (!isOurBlobUrl(image)) return { error: "Invalid image" };
+  return { image };
 }
 
 export async function getItems(): Promise<SerializedItem[]> {
@@ -61,7 +67,7 @@ export async function getItem(id: string): Promise<SerializedItem | null> {
   return item ? serializeItem(item) : null;
 }
 
-export async function createItem(formData: FormData) {
+export async function createItem(formData: FormData): Promise<ActionResult> {
   await requireAuth();
   const name = String(formData.get("name") ?? "").trim();
   const category = String(formData.get("category") ?? "").trim() || null;
@@ -70,12 +76,15 @@ export async function createItem(formData: FormData) {
   const costPrice = Number(formData.get("costPrice") ?? 0);
   const price = Number(formData.get("price") ?? 0);
   const quantity = Number(formData.get("quantity") ?? 0);
-  const image = readImage(formData);
 
-  if (!name) throw new Error("Item name is required");
-  if (Number.isNaN(costPrice) || costPrice < 0) throw new Error("Invalid cost price");
-  if (Number.isNaN(price) || price < 0) throw new Error("Invalid sell price");
-  if (Number.isNaN(quantity) || quantity < 0) throw new Error("Invalid quantity");
+  const imageResult = readImage(formData);
+  if ("error" in imageResult) return { error: imageResult.error };
+  const image = imageResult.image;
+
+  if (!name) return { error: "Item name is required" };
+  if (Number.isNaN(costPrice) || costPrice < 0) return { error: "Invalid cost price" };
+  if (Number.isNaN(price) || price < 0) return { error: "Invalid sell price" };
+  if (Number.isNaN(quantity) || quantity < 0) return { error: "Invalid quantity" };
 
   await prisma.item.create({
     data: { name, category, size, color, image, costPrice, price, quantity },
@@ -84,9 +93,10 @@ export async function createItem(formData: FormData) {
   revalidatePath("/items");
   revalidatePath("/sales");
   revalidatePath("/");
+  return;
 }
 
-export async function updateItem(id: string, formData: FormData) {
+export async function updateItem(id: string, formData: FormData): Promise<ActionResult> {
   await requireAuth();
   const name = String(formData.get("name") ?? "").trim();
   const category = String(formData.get("category") ?? "").trim() || null;
@@ -95,12 +105,15 @@ export async function updateItem(id: string, formData: FormData) {
   const costPrice = Number(formData.get("costPrice") ?? 0);
   const price = Number(formData.get("price") ?? 0);
   const quantity = Number(formData.get("quantity") ?? 0);
-  const image = readImage(formData);
 
-  if (!name) throw new Error("Item name is required");
-  if (Number.isNaN(costPrice) || costPrice < 0) throw new Error("Invalid cost price");
-  if (Number.isNaN(price) || price < 0) throw new Error("Invalid sell price");
-  if (Number.isNaN(quantity) || quantity < 0) throw new Error("Invalid quantity");
+  const imageResult = readImage(formData);
+  if ("error" in imageResult) return { error: imageResult.error };
+  const image = imageResult.image;
+
+  if (!name) return { error: "Item name is required" };
+  if (Number.isNaN(costPrice) || costPrice < 0) return { error: "Invalid cost price" };
+  if (Number.isNaN(price) || price < 0) return { error: "Invalid sell price" };
+  if (Number.isNaN(quantity) || quantity < 0) return { error: "Invalid quantity" };
 
   const previous = await prisma.item.findUnique({ where: { id }, select: { image: true } });
 
@@ -116,9 +129,10 @@ export async function updateItem(id: string, formData: FormData) {
   revalidatePath("/items");
   revalidatePath("/sales");
   revalidatePath("/");
+  return;
 }
 
-export async function deleteItem(id: string) {
+export async function deleteItem(id: string): Promise<ActionResult> {
   await requireAuth();
 
   let item;
@@ -126,9 +140,10 @@ export async function deleteItem(id: string) {
     item = await prisma.item.delete({ where: { id } });
   } catch (e) {
     if (e instanceof Error && e.message.includes("foreign key constraint")) {
-      throw new Error(
-        "This item has sales recorded against it and can't be deleted. Set its quantity to 0 instead to hide it from new sales."
-      );
+      return {
+        error:
+          "This item has sales recorded against it and can't be deleted. Set its quantity to 0 instead to hide it from new sales.",
+      };
     }
     throw e;
   }
@@ -139,4 +154,5 @@ export async function deleteItem(id: string) {
   revalidatePath("/items");
   revalidatePath("/sales");
   revalidatePath("/");
+  return;
 }

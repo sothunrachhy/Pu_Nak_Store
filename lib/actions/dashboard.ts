@@ -98,7 +98,7 @@ export async function getDashboardStats() {
     sumSalesSince(month),
     sumExpensesSince(month),
     prisma.item.findMany({
-      where: { quantity: { lte: 3 } },
+      where: { quantity: { lte: 3 }, archivedAt: null },
       orderBy: { quantity: "asc" },
       take: 10,
     }),

@@ -1,10 +1,10 @@
 import ItemsView from "@/components/ItemsView";
-import { getItems } from "@/lib/actions/items";
+import { getItems, getArchivedItems } from "@/lib/actions/items";
 
 export const dynamic = "force-dynamic";
 
 export default async function ItemsPage() {
-  const items = await getItems();
+  const [items, archivedItems] = await Promise.all([getItems(), getArchivedItems()]);
 
-  return <ItemsView items={items} />;
+  return <ItemsView items={items} archivedItems={archivedItems} />;
 }

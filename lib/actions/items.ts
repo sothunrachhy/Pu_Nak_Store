@@ -16,6 +16,9 @@ export type SerializedItem = {
   costPrice: number;
   price: number;
   quantity: number;
+  // Whether the item has ever been sold. An item with sales can't be deleted
+  // without destroying that history, so the UI offers Archive instead.
+  salesCount: number;
 };
 
 // Next.js redacts the .message of any thrown Error in production for
@@ -34,6 +37,7 @@ function serializeItem(item: {
   costPrice: unknown;
   price: unknown;
   quantity: number;
+  _count: { sales: number };
 }): SerializedItem {
   return {
     id: item.id,
@@ -45,6 +49,7 @@ function serializeItem(item: {
     costPrice: Number(item.costPrice),
     price: Number(item.price),
     quantity: item.quantity,
+    salesCount: item._count.sales,
   };
 }
 
@@ -55,15 +60,34 @@ function readImage(formData: FormData): { image: string | null } | { error: stri
   return { image };
 }
 
+const withSalesCount = { _count: { select: { sales: true } } } as const;
+
 export async function getItems(): Promise<SerializedItem[]> {
   await requireAuth();
-  const items = await prisma.item.findMany({ orderBy: { name: "asc" } });
+  const items = await prisma.item.findMany({
+    where: { archivedAt: null },
+    orderBy: { name: "asc" },
+    include: withSalesCount,
+  });
+  return items.map(serializeItem);
+}
+
+export async function getArchivedItems(): Promise<SerializedItem[]> {
+  await requireAuth();
+  const items = await prisma.item.findMany({
+    where: { archivedAt: { not: null } },
+    orderBy: { archivedAt: "desc" },
+    include: withSalesCount,
+  });
   return items.map(serializeItem);
 }
 
 export async function getItem(id: string): Promise<SerializedItem | null> {
   await requireAuth();
-  const item = await prisma.item.findUnique({ where: { id } });
+  const item = await prisma.item.findUnique({
+    where: { id },
+    include: withSalesCount,
+  });
   return item ? serializeItem(item) : null;
 }
 
@@ -132,6 +156,24 @@ export async function updateItem(id: string, formData: FormData): Promise<Action
   return;
 }
 
+export async function archiveItem(id: string): Promise<ActionResult> {
+  await requireAuth();
+  await prisma.item.update({ where: { id }, data: { archivedAt: new Date() } });
+  revalidatePath("/items");
+  revalidatePath("/sales");
+  revalidatePath("/");
+  return;
+}
+
+export async function unarchiveItem(id: string): Promise<ActionResult> {
+  await requireAuth();
+  await prisma.item.update({ where: { id }, data: { archivedAt: null } });
+  revalidatePath("/items");
+  revalidatePath("/sales");
+  revalidatePath("/");
+  return;
+}
+
 export async function deleteItem(id: string): Promise<ActionResult> {
   await requireAuth();
 
@@ -139,10 +181,12 @@ export async function deleteItem(id: string): Promise<ActionResult> {
   try {
     item = await prisma.item.delete({ where: { id } });
   } catch (e) {
+    // The UI only offers Delete on items with no sales, so this is the
+    // fallback for an item that was sold between page load and the click.
     if (e instanceof Error && e.message.includes("foreign key constraint")) {
       return {
         error:
-          "This item has sales recorded against it and can't be deleted. Set its quantity to 0 instead to hide it from new sales.",
+          "This item has been sold at least once, so deleting it would erase that sales history. Archive it instead to hide it from your items and sales.",
       };
     }
     throw e;

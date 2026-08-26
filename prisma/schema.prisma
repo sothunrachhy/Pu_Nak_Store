@@ -20,9 +20,15 @@ model Item {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Items the shop no longer stocks are archived rather than deleted: a Sale
+  // points at its Item, so deleting one would take its sales history - and the
+  // income and cost-of-goods totals built from it - with it.
+  archivedAt DateTime?
+
   sales Sale[]
 
   @@index([name])
+  @@index([archivedAt])
 }
 
 model Sale {

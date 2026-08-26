@@ -9,20 +9,30 @@ import {
   createItem,
   updateItem,
   deleteItem,
+  archiveItem,
+  unarchiveItem,
   type SerializedItem,
 } from "@/lib/actions/items";
 import { uploadItemImage } from "@/lib/actions/upload";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
+  ArchiveIcon,
   CameraIcon,
   CloseIcon,
   ImagePlaceholderIcon,
   PencilIcon,
   PlusIcon,
+  RestoreIcon,
   TrashIcon,
 } from "@/components/icons";
 
-export default function ItemsView({ items }: { items: SerializedItem[] }) {
+export default function ItemsView({
+  items,
+  archivedItems,
+}: {
+  items: SerializedItem[];
+  archivedItems: SerializedItem[];
+}) {
   const { t, lang } = useI18n();
   const [editing, setEditing] = useState<SerializedItem | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +41,8 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
   const [imageBusy, setImageBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<string | null>(null);
+  const [tab, setTab] = useState<"active" | "archived">("active");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const openNew = () => {
@@ -106,6 +118,21 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
       } else {
         setDeleteTarget(null);
       }
+    });
+  };
+
+  const confirmArchive = () => {
+    if (!archiveTarget) return;
+    const id = archiveTarget;
+    startTransition(async () => {
+      await archiveItem(id);
+      setArchiveTarget(null);
+    });
+  };
+
+  const handleRestore = (id: string) => {
+    startTransition(async () => {
+      await unarchiveItem(id);
     });
   };
 
@@ -253,6 +280,12 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
     );
   }
 
+  // Restoring the last archived item hides the tab bar, so derive the visible
+  // tab rather than leaving state stranded on an empty "Archived" list.
+  const activeTab = tab === "archived" && archivedItems.length === 0 ? "active" : tab;
+  const showingArchived = activeTab === "archived";
+  const list = showingArchived ? archivedItems : items;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -266,13 +299,37 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
         </button>
       </div>
 
-      {items.length === 0 ? (
-        <p className="card p-6 text-center text-sm text-muted">{t("noItems")}</p>
+      {archivedItems.length > 0 && (
+        <div className="flex overflow-hidden rounded-full border border-line text-xs font-medium">
+          {(["active", "archived"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={`flex-1 px-3 py-1.5 transition-colors ${
+                activeTab === key ? "bg-ink text-white" : "bg-surface text-muted"
+              }`}
+            >
+              {key === "active" ? t("activeItems") : t("archivedItems")} (
+              {key === "active" ? items.length : archivedItems.length})
+            </button>
+          ))}
+        </div>
+      )}
+
+      {list.length === 0 ? (
+        <p className="card p-6 text-center text-sm text-muted">
+          {showingArchived ? t("noArchivedItems") : t("noItems")}
+        </p>
       ) : (
         <ul className="grid grid-cols-2 gap-3">
-          {items.map((item) => (
+          {list.map((item) => (
             <li key={item.id} className="card overflow-hidden">
-              <div className="aspect-square w-full bg-cream">
+              <div
+                className={`aspect-square w-full bg-cream ${
+                  showingArchived ? "opacity-40 grayscale" : ""
+                }`}
+              >
                 {item.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -295,34 +352,66 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
                   <span className="text-sm font-semibold text-ink">
                     {formatMoney(item.price)}
                   </span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      item.quantity <= 3
-                        ? "bg-warning-soft text-warning"
-                        : "bg-cream text-muted"
-                    }`}
-                  >
-                    {item.quantity} {t("inStock")}
-                  </span>
+                  {showingArchived ? (
+                    <span className="rounded-full bg-cream px-2 py-0.5 text-xs font-medium text-muted">
+                      {t("archivedItems")}
+                    </span>
+                  ) : (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        item.quantity <= 3
+                          ? "bg-warning-soft text-warning"
+                          : "bg-cream text-muted"
+                      }`}
+                    >
+                      {item.quantity} {t("inStock")}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={() => openEdit(item)}
-                    aria-label={t("edit")}
-                    className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-line py-2 text-xs font-medium text-ink active:bg-cream"
-                  >
-                    <PencilIcon className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setDeleteError(null);
-                      setDeleteTarget(item.id);
-                    }}
-                    aria-label={t("delete")}
-                    className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-danger/20 py-2 text-xs font-medium text-danger active:bg-danger-soft"
-                  >
-                    <TrashIcon className="h-3.5 w-3.5" />
-                  </button>
+                  {showingArchived ? (
+                    <button
+                      onClick={() => handleRestore(item.id)}
+                      disabled={pending}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-line py-2 text-xs font-medium text-ink active:bg-cream disabled:opacity-60"
+                    >
+                      <RestoreIcon className="h-3.5 w-3.5" />
+                      {t("restore")}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => openEdit(item)}
+                        aria-label={t("edit")}
+                        className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-line py-2 text-xs font-medium text-ink active:bg-cream"
+                      >
+                        <PencilIcon className="h-3.5 w-3.5" />
+                      </button>
+                      {/* An item that has been sold can't be deleted without
+                          taking its sales history with it - offer Archive. */}
+                      {item.salesCount > 0 ? (
+                        <button
+                          onClick={() => setArchiveTarget(item.id)}
+                          aria-label={t("archive")}
+                          title={t("soldBefore")}
+                          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-line py-2 text-xs font-medium text-muted active:bg-cream"
+                        >
+                          <ArchiveIcon className="h-3.5 w-3.5" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setDeleteError(null);
+                            setDeleteTarget(item.id);
+                          }}
+                          aria-label={t("delete")}
+                          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-danger/20 py-2 text-xs font-medium text-danger active:bg-danger-soft"
+                        >
+                          <TrashIcon className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </li>
@@ -342,6 +431,17 @@ export default function ItemsView({ items }: { items: SerializedItem[] }) {
           setDeleteTarget(null);
           setDeleteError(null);
         }}
+      />
+
+      <ConfirmDialog
+        open={archiveTarget !== null}
+        message={t("confirmArchive")}
+        confirmLabel={t("archive")}
+        cancelLabel={t("cancel")}
+        pending={pending}
+        tone="neutral"
+        onConfirm={confirmArchive}
+        onCancel={() => setArchiveTarget(null)}
       />
     </div>
   );

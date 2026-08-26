@@ -85,6 +85,14 @@ export const dictionary = {
     sell: "Sell",
     somethingWrong: "Something went wrong",
     tryAgain: "Try Again",
+    archive: "Archive",
+    activeItems: "Selling",
+    archivedItems: "Archived",
+    restore: "Restore",
+    confirmArchive:
+      "Hide this item from your items and sales? Its sales history stays in your reports, and you can bring it back any time.",
+    noArchivedItems: "Nothing archived yet.",
+    soldBefore: "Sold before",
   },
   km: {
     appName: "គ្រប់គ្រងស្តុក",
@@ -160,6 +168,14 @@ export const dictionary = {
     sell: "លក់",
     somethingWrong: "មានបញ្ហាកើតឡើង",
     tryAgain: "ព្យាយាមម្តងទៀត",
+    archive: "លាក់ទុក",
+    activeItems: "កំពុងលក់",
+    archivedItems: "បានលាក់ទុក",
+    restore: "យកមកវិញ",
+    confirmArchive:
+      "លាក់ទំនិញនេះពីបញ្ជីទំនិញ និងការលក់មែនទេ? ប្រវត្តិលក់នៅដដែលក្នុងរបាយការណ៍ ហើយអ្នកអាចយកវាមកវិញបានគ្រប់ពេល។",
+    noArchivedItems: "មិនទាន់មានទំនិញបានលាក់ទុកទេ។",
+    soldBefore: "ធ្លាប់លក់",
   },
 } as const;
 

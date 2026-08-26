@@ -1,6 +1,6 @@
 "use client";
 
-import { WarningIcon } from "@/components/icons";
+import { ArchiveIcon, WarningIcon } from "@/components/icons";
 
 export default function ConfirmDialog({
   open,
@@ -9,6 +9,7 @@ export default function ConfirmDialog({
   cancelLabel,
   pending,
   error,
+  tone = "danger",
   onConfirm,
   onCancel,
 }: {
@@ -18,10 +19,15 @@ export default function ConfirmDialog({
   cancelLabel: string;
   pending?: boolean;
   error?: string | null;
+  // Archiving is reversible, so it shouldn't wear the red of a delete.
+  tone?: "danger" | "neutral";
   onConfirm: () => void;
   onCancel: () => void;
 }) {
   if (!open) return null;
+
+  const isDanger = tone === "danger";
+  const Icon = isDanger ? WarningIcon : ArchiveIcon;
 
   return (
     <div
@@ -32,8 +38,12 @@ export default function ConfirmDialog({
         className="card w-full max-w-sm p-5 text-center"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-danger-soft text-danger">
-          <WarningIcon className="h-5 w-5" />
+        <div
+          className={`mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full ${
+            isDanger ? "bg-danger-soft text-danger" : "bg-cream text-muted"
+          }`}
+        >
+          <Icon className="h-5 w-5" />
         </div>
         <p className="text-sm text-ink">{message}</p>
         {error && <p className="mt-3 text-sm text-danger">{error}</p>}
@@ -45,7 +55,9 @@ export default function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={pending}
-            className="flex-1 rounded-xl bg-danger py-3 text-base font-medium text-white transition-colors active:opacity-90 disabled:opacity-60"
+            className={`flex-1 rounded-xl py-3 text-base font-medium text-white transition-colors active:opacity-90 disabled:opacity-60 ${
+              isDanger ? "bg-danger" : "bg-primary"
+            }`}
           >
             {confirmLabel}
           </button>

@@ -49,6 +49,7 @@ export default function SalesView({
   const [cart, setCart] = useState<Record<string, number>>({});
   const [basketOpen, setBasketOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<string | null>(null);
   // Prices bargained down for the basket in hand, per item. Absent means the
   // item's normal price applies.
   const [priceOverrides, setPriceOverrides] = useState<Record<string, number>>({});
@@ -87,11 +88,24 @@ export default function SalesView({
         ),
     [cart, items, priceOverrides]
   );
-  // Quick Sell shows what is actually moving first, narrowed by the search
-  // box. The Custom Sale picker keeps the full, name-ordered list.
+  // Built from the categories actually in stock rather than a fixed list, so
+  // custom ones - and ones typed in the other language - still get a chip.
+  const categories = useMemo(() => {
+    const seen = new Set<string>();
+    for (const item of items) if (item.category) seen.add(item.category);
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  // Archiving the last item of a category should fall back to All rather than
+  // leave the grid filtered by something no longer on offer.
+  const activeCategory = category && categories.includes(category) ? category : null;
+
+  // Quick Sell shows what is actually moving first, narrowed by the category
+  // chips and search box. The Custom Sale picker keeps the full list.
   const quickSellItems = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items
+      .filter((i) => !activeCategory || i.category === activeCategory)
       .filter(
         (i) =>
           !q ||
@@ -102,7 +116,7 @@ export default function SalesView({
       .sort(
         (a, b) => b.recentUnitsSold - a.recentUnitsSold || a.name.localeCompare(b.name)
       );
-  }, [items, search]);
+  }, [items, search, activeCategory]);
 
   const basketCount = basketLines.reduce((n, l) => n + l.quantity, 0);
   const basketCountLabel = `${basketCount} ${basketCount === 1 ? t("itemWord") : t("itemsWord")}`;
@@ -388,6 +402,28 @@ export default function SalesView({
         <section>
           <p className="mb-0.5 text-sm font-medium text-muted">{t("quickSell")}</p>
           <p className="mb-2 text-xs text-muted/80">{t("quickSellHint")}</p>
+          {categories.length > 1 && (
+            <div className="-mx-3 mb-2 flex gap-1.5 overflow-x-auto px-3 pb-1">
+              {[null, ...categories].map((option) => {
+                const selected = activeCategory === option;
+                return (
+                  <button
+                    key={option ?? "__all__"}
+                    type="button"
+                    onClick={() => setCategory(option)}
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      selected
+                        ? "border-primary bg-primary text-white"
+                        : "border-line bg-surface text-ink active:bg-cream"
+                    }`}
+                  >
+                    {option ?? t("all")}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {items.length > 5 && (
             <input
               type="search"

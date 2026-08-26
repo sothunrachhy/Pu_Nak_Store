@@ -4,6 +4,7 @@ import { ACTION_FAILED } from "@/lib/actionError";
 import {
   createContext,
   useContext,
+  useEffect,
   useSyncExternalStore,
   ReactNode,
 } from "react";
@@ -222,22 +223,34 @@ function subscribeLang(onChange: () => void) {
   };
 }
 
+// The shop runs in Khmer, so that is the default: an English UI only appears
+// if someone has explicitly chosen it. This also keeps the category, size and
+// colour options a shopkeeper picks from consistently Khmer - they are stored
+// as the literal text that was on screen, so a stray English session would
+// file a hat under "Hat" instead of "មួក" and split it in two.
+const DEFAULT_LANG: Lang = "km";
+
 function getStoredLang(): Lang {
   try {
-    return localStorage.getItem(STORAGE_KEY) === "km" ? "km" : "en";
+    return localStorage.getItem(STORAGE_KEY) === "en" ? "en" : DEFAULT_LANG;
   } catch {
     // Private windows and blocked site data throw on access.
-    return "en";
+    return DEFAULT_LANG;
   }
 }
 
-// The server has no localStorage, so it always renders English.
 function getServerLang(): Lang {
-  return "en";
+  return DEFAULT_LANG;
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const lang = useSyncExternalStore(subscribeLang, getStoredLang, getServerLang);
+
+  // Syncing an attribute the server rendered is what effects are for; no state
+  // is set here, so this stays off the render path.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   const setLang = (newLang: Lang) => {
     try {

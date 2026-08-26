@@ -53,7 +53,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
+      lang="km"
       className={`${rubik.variable} ${nunitoSans.variable} ${notoSansKhmer.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-cream text-ink">

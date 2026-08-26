@@ -48,6 +48,7 @@ export default function SalesView({
   // until the basket is recorded, so a mis-tap costs nothing.
   const [cart, setCart] = useState<Record<string, number>>({});
   const [basketOpen, setBasketOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [stepperItemId, setStepperItemId] = useState<string | null>(null);
   const [stepperQty, setStepperQty] = useState(1);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -79,6 +80,23 @@ export default function SalesView({
         .filter((line): line is { item: SerializedItem; quantity: number } => line !== null),
     [cart, items]
   );
+  // Quick Sell shows what is actually moving first, narrowed by the search
+  // box. The Custom Sale picker keeps the full, name-ordered list.
+  const quickSellItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items
+      .filter(
+        (i) =>
+          !q ||
+          [i.name, i.category, i.size, i.color].some((field) =>
+            field?.toLowerCase().includes(q)
+          )
+      )
+      .sort(
+        (a, b) => b.recentUnitsSold - a.recentUnitsSold || a.name.localeCompare(b.name)
+      );
+  }, [items, search]);
+
   const basketCount = basketLines.reduce((n, l) => n + l.quantity, 0);
   const basketTotal = basketLines.reduce((n, l) => n + l.item.price * l.quantity, 0);
 
@@ -341,8 +359,21 @@ export default function SalesView({
         <section>
           <p className="mb-0.5 text-sm font-medium text-muted">{t("quickSell")}</p>
           <p className="mb-2 text-xs text-muted/80">{t("quickSellHint")}</p>
+          {items.length > 5 && (
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("searchItems")}
+              className="input mb-2 py-2 text-sm"
+            />
+          )}
+
+          {quickSellItems.length === 0 ? (
+            <p className="card p-5 text-center text-sm text-muted">{t("noItems")}</p>
+          ) : (
           <ul className="grid grid-cols-3 gap-2">
-            {items.map((item) => {
+            {quickSellItems.map((item) => {
               const outOfStock = item.quantity === 0;
               const inBasket = cart[item.id] ?? 0;
               const inStepper = stepperItemId === item.id;
@@ -453,6 +484,7 @@ export default function SalesView({
               );
             })}
           </ul>
+          )}
         </section>
       )}
 

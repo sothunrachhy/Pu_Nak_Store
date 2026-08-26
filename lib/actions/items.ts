@@ -19,6 +19,10 @@ export type SerializedItem = {
   // Whether the item has ever been sold. An item with sales can't be deleted
   // without destroying that history, so the UI offers Archive instead.
   salesCount: number;
+  // Units sold in the last 30 days. Quick Sell orders by this so the things
+  // actually moving sit at the top of the grid instead of whatever starts
+  // with "A".
+  recentUnitsSold: number;
 };
 
 // Next.js redacts the .message of any thrown Error in production for
@@ -38,7 +42,7 @@ function serializeItem(item: {
   price: unknown;
   quantity: number;
   _count: { sales: number };
-}): SerializedItem {
+}, recentUnitsSold = 0): SerializedItem {
   return {
     id: item.id,
     name: item.name,
@@ -50,6 +54,7 @@ function serializeItem(item: {
     price: Number(item.price),
     quantity: item.quantity,
     salesCount: item._count.sales,
+    recentUnitsSold,
   };
 }
 
@@ -62,14 +67,34 @@ function readImage(formData: FormData): { image: string | null } | { error: stri
 
 const withSalesCount = { _count: { select: { sales: true } } } as const;
 
+const RECENT_WINDOW_DAYS = 30;
+
+// Units sold per item over the recent window, used to rank the Quick Sell
+// grid. One grouped query rather than a per-item count.
+async function recentUnitsSoldByItem(): Promise<Map<string, number>> {
+  const since = new Date();
+  since.setDate(since.getDate() - RECENT_WINDOW_DAYS);
+  const rows = await prisma.sale.groupBy({
+    by: ["itemId"],
+    where: { createdAt: { gte: since } },
+    _sum: { quantity: true },
+  });
+  return new Map(rows.map((r) => [r.itemId, r._sum.quantity ?? 0]));
+}
+
 export async function getItems(): Promise<SerializedItem[]> {
   await requireAuth();
-  const items = await prisma.item.findMany({
-    where: { archivedAt: null },
-    orderBy: { name: "asc" },
-    include: withSalesCount,
-  });
-  return items.map(serializeItem);
+  // Ordered by name here so the Items screen stays a predictable catalogue;
+  // Quick Sell re-sorts by recentUnitsSold for its own grid.
+  const [items, recent] = await Promise.all([
+    prisma.item.findMany({
+      where: { archivedAt: null },
+      orderBy: { name: "asc" },
+      include: withSalesCount,
+    }),
+    recentUnitsSoldByItem(),
+  ]);
+  return items.map((item) => serializeItem(item, recent.get(item.id) ?? 0));
 }
 
 export async function getArchivedItems(): Promise<SerializedItem[]> {

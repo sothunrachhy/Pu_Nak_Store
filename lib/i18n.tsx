@@ -99,6 +99,7 @@ export const dictionary = {
     clear: "Clear",
     add: "Add",
     itemsWord: "items",
+    searchItems: "Search items",
   },
   km: {
     appName: "គ្រប់គ្រងស្តុក",
@@ -187,6 +188,7 @@ export const dictionary = {
     clear: "សម្អាត",
     add: "បន្ថែម",
     itemsWord: "ទំនិញ",
+    searchItems: "ស្វែងរកទំនិញ",
   },
 } as const;
 

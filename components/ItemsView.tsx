@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, useErrorText } from "@/lib/i18n";
+import { runAction } from "@/lib/actionError";
 import { formatMoney } from "@/lib/format";
 import { resizeImageFile } from "@/lib/image";
 import { CATEGORY_OPTIONS, SIZE_OPTIONS, COLOR_OPTIONS } from "@/lib/clothingOptions";
@@ -34,6 +35,7 @@ export default function ItemsView({
   archivedItems: SerializedItem[];
 }) {
   const { t, lang } = useI18n();
+  const errorText = useErrorText();
   const [editing, setEditing] = useState<SerializedItem | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -42,6 +44,7 @@ export default function ItemsView({
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<string | null>(null);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
   const [tab, setTab] = useState<"active" | "archived">("active");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -82,7 +85,7 @@ export default function ItemsView({
       // An unchanged existing photo is already a blob URL and skips this.
       const image = String(formData.get("image") ?? "");
       if (image.startsWith("data:")) {
-        const uploadResult = await uploadItemImage(image);
+        const uploadResult = await runAction(() => uploadItemImage(image));
         if ("error" in uploadResult) {
           setError(uploadResult.error);
           return;
@@ -92,9 +95,9 @@ export default function ItemsView({
 
       let result;
       if (editing === "new") {
-        result = await createItem(formData);
+        result = await runAction(() => createItem(formData));
       } else if (editing) {
-        result = await updateItem(editing.id, formData);
+        result = await runAction(() => updateItem(editing.id, formData));
       }
 
       if (result?.error) {
@@ -112,7 +115,7 @@ export default function ItemsView({
     const id = deleteTarget;
     setDeleteError(null);
     startTransition(async () => {
-      const result = await deleteItem(id);
+      const result = await runAction(() => deleteItem(id));
       if (result?.error) {
         setDeleteError(result.error);
       } else {
@@ -124,15 +127,17 @@ export default function ItemsView({
   const confirmArchive = () => {
     if (!archiveTarget) return;
     const id = archiveTarget;
+    setArchiveError(null);
     startTransition(async () => {
-      await archiveItem(id);
-      setArchiveTarget(null);
+      const result = await runAction(() => archiveItem(id));
+      if (result?.error) setArchiveError(result.error);
+      else setArchiveTarget(null);
     });
   };
 
   const handleRestore = (id: string) => {
     startTransition(async () => {
-      await unarchiveItem(id);
+      await runAction(() => unarchiveItem(id));
     });
   };
 
@@ -257,7 +262,7 @@ export default function ItemsView({
             />
           </Field>
 
-          {error && <p className="text-sm text-danger">{error}</p>}
+          {error && <p className="text-sm text-danger">{errorText(error)}</p>}
 
           <div className="mt-2 flex gap-3">
             <button
@@ -425,7 +430,7 @@ export default function ItemsView({
         confirmLabel={t("delete")}
         cancelLabel={t("cancel")}
         pending={pending}
-        error={deleteError}
+        error={errorText(deleteError)}
         onConfirm={confirmDelete}
         onCancel={() => {
           setDeleteTarget(null);
@@ -439,9 +444,13 @@ export default function ItemsView({
         confirmLabel={t("archive")}
         cancelLabel={t("cancel")}
         pending={pending}
+        error={errorText(archiveError)}
         tone="neutral"
         onConfirm={confirmArchive}
-        onCancel={() => setArchiveTarget(null)}
+        onCancel={() => {
+          setArchiveTarget(null);
+          setArchiveError(null);
+        }}
       />
     </div>
   );

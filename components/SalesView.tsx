@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, useErrorText } from "@/lib/i18n";
+import { runAction } from "@/lib/actionError";
 import { formatMoney, formatDate } from "@/lib/format";
 import { createSale, deleteSale, type SerializedSale } from "@/lib/actions/sales";
 import type { SerializedItem } from "@/lib/actions/items";
@@ -29,6 +30,7 @@ export default function SalesView({
   sales: SerializedSale[];
 }) {
   const { t, lang } = useI18n();
+  const errorText = useErrorText();
   const [showForm, setShowForm] = useState(false);
   const [itemId, setItemId] = useState(items[0]?.id ?? "");
   const [quantity, setQuantity] = useState(1);
@@ -67,7 +69,7 @@ export default function SalesView({
   const handleSubmit = (formData: FormData) => {
     setError(null);
     startTransition(async () => {
-      const result = await createSale(formData);
+      const result = await runAction(() => createSale(formData));
       if ("error" in result) {
         setError(result.error);
         return;
@@ -83,7 +85,7 @@ export default function SalesView({
     const id = deleteTarget;
     setDeleteError(null);
     startTransition(async () => {
-      const result = await deleteSale(id);
+      const result = await runAction(() => deleteSale(id));
       if (result?.error) {
         setDeleteError(result.error);
       } else {
@@ -107,7 +109,7 @@ export default function SalesView({
     fd.set("itemId", item.id);
     fd.set("quantity", String(qty));
     fd.set("unitPrice", String(item.price));
-    const result = await createSale(fd);
+    const result = await runAction(() => createSale(fd));
     if ("error" in result) {
       setToastError(result.error);
       if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -130,7 +132,7 @@ export default function SalesView({
     setToast(null);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     startTransition(async () => {
-      await deleteSale(saleId);
+      await runAction(() => deleteSale(saleId));
     });
   };
 
@@ -247,7 +249,7 @@ export default function SalesView({
 
             {error && (
               <p className="text-sm text-danger">
-                {error === "Not enough stock" ? t("notEnoughStock") : error}
+                {errorText(error)}
               </p>
             )}
 
@@ -480,7 +482,7 @@ export default function SalesView({
 
       {toastError && (
         <div className="fixed inset-x-4 bottom-24 z-30 mx-auto max-w-sm rounded-xl bg-danger px-4 py-3 text-center text-sm text-white shadow-lg">
-          {toastError === "Not enough stock" ? t("notEnoughStock") : toastError}
+          {errorText(toastError)}
         </div>
       )}
 
@@ -490,7 +492,7 @@ export default function SalesView({
         confirmLabel={t("delete")}
         cancelLabel={t("cancel")}
         pending={pending}
-        error={deleteError}
+        error={errorText(deleteError)}
         onConfirm={confirmDelete}
         onCancel={() => {
           setDeleteTarget(null);

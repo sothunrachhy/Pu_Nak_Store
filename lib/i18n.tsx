@@ -1,5 +1,6 @@
 "use client";
 
+import { ACTION_FAILED } from "@/lib/actionError";
 import {
   createContext,
   useContext,
@@ -93,6 +94,7 @@ export const dictionary = {
       "Hide this item from your items and sales? Its sales history stays in your reports, and you can bring it back any time.",
     noArchivedItems: "Nothing archived yet.",
     soldBefore: "Sold before",
+    actionFailed: "Couldn't reach the shop data. Refresh the page and try again.",
   },
   km: {
     appName: "គ្រប់គ្រងស្តុក",
@@ -176,6 +178,7 @@ export const dictionary = {
       "លាក់ទំនិញនេះពីបញ្ជីទំនិញ និងការលក់មែនទេ? ប្រវត្តិលក់នៅដដែលក្នុងរបាយការណ៍ ហើយអ្នកអាចយកវាមកវិញបានគ្រប់ពេល។",
     noArchivedItems: "មិនទាន់មានទំនិញបានលាក់ទុកទេ។",
     soldBefore: "ធ្លាប់លក់",
+    actionFailed: "មិនអាចភ្ជាប់ទិន្នន័យហាងបានទេ។ សូមផ្ទុកទំព័រឡើងវិញ ហើយព្យាយាមម្តងទៀត។",
   },
 } as const;
 
@@ -213,6 +216,18 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       {children}
     </I18nContext.Provider>
   );
+}
+
+// Server Actions hand back plain English strings; map the ones we have
+// translations for, and pass anything else through unchanged.
+export function useErrorText() {
+  const { t } = useI18n();
+  return (message: string | null | undefined) => {
+    if (!message) return null;
+    if (message === ACTION_FAILED) return t("actionFailed");
+    if (message === "Not enough stock") return t("notEnoughStock");
+    return message;
+  };
 }
 
 export function useI18n() {

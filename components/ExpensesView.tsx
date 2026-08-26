@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, useErrorText } from "@/lib/i18n";
+import { runAction } from "@/lib/actionError";
 import { formatMoney, formatDate } from "@/lib/format";
 import {
   createExpense,
@@ -17,6 +18,7 @@ export default function ExpensesView({
   expenses: SerializedExpense[];
 }) {
   const { t, lang } = useI18n();
+  const errorText = useErrorText();
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -26,7 +28,7 @@ export default function ExpensesView({
   const handleSubmit = (formData: FormData) => {
     setError(null);
     startTransition(async () => {
-      const result = await createExpense(formData);
+      const result = await runAction(() => createExpense(formData));
       if (result?.error) {
         setError(result.error);
         return;
@@ -41,7 +43,7 @@ export default function ExpensesView({
     const id = deleteTarget;
     setDeleteError(null);
     startTransition(async () => {
-      const result = await deleteExpense(id);
+      const result = await runAction(() => deleteExpense(id));
       if (result?.error) {
         setDeleteError(result.error);
       } else {
@@ -75,7 +77,7 @@ export default function ExpensesView({
             <input name="note" className="input" />
           </label>
 
-          {error && <p className="text-sm text-danger">{error}</p>}
+          {error && <p className="text-sm text-danger">{errorText(error)}</p>}
 
           <div className="mt-2 flex gap-3">
             <button
@@ -152,7 +154,7 @@ export default function ExpensesView({
         confirmLabel={t("delete")}
         cancelLabel={t("cancel")}
         pending={pending}
-        error={deleteError}
+        error={errorText(deleteError)}
         onConfirm={confirmDelete}
         onCancel={() => {
           setDeleteTarget(null);

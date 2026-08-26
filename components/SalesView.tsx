@@ -5,7 +5,13 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useI18n, useErrorText } from "@/lib/i18n";
 import { runAction } from "@/lib/actionError";
 import { formatMoney, formatDate } from "@/lib/format";
-import { createSale, deleteSale, type SerializedSale } from "@/lib/actions/sales";
+import {
+  createSale,
+  createSaleBatch,
+  deleteSale,
+  deleteSales,
+  type SerializedSale,
+} from "@/lib/actions/sales";
 import type { SerializedItem } from "@/lib/actions/items";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
@@ -16,9 +22,9 @@ import {
 } from "@/components/icons";
 
 type Toast = {
-  saleId: string;
-  itemName: string;
-  quantity: number;
+  // A basket records one sale row per item, so undo has to reverse all of them.
+  saleIds: string[];
+  label: string;
   total: number;
 };
 
@@ -38,7 +44,10 @@ export default function SalesView({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const [quickPendingId, setQuickPendingId] = useState<string | null>(null);
+  // itemId -> quantity the customer is buying right now. Nothing is written
+  // until the basket is recorded, so a mis-tap costs nothing.
+  const [cart, setCart] = useState<Record<string, number>>({});
+  const [basketOpen, setBasketOpen] = useState(false);
   const [stepperItemId, setStepperItemId] = useState<string | null>(null);
   const [stepperQty, setStepperQty] = useState(1);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -59,6 +68,19 @@ export default function SalesView({
   );
 
   const total = unitPrice * quantity;
+
+  const basketLines = useMemo(
+    () =>
+      Object.entries(cart)
+        .map(([id, quantity]) => {
+          const item = items.find((i) => i.id === id);
+          return item ? { item, quantity } : null;
+        })
+        .filter((line): line is { item: SerializedItem; quantity: number } => line !== null),
+    [cart, items]
+  );
+  const basketCount = basketLines.reduce((n, l) => n + l.quantity, 0);
+  const basketTotal = basketLines.reduce((n, l) => n + l.item.price * l.quantity, 0);
 
   const handleItemChange = (id: string) => {
     setItemId(id);
@@ -101,38 +123,60 @@ export default function SalesView({
     toastTimer.current = setTimeout(() => setToast(null), 4000);
   };
 
-  const handleQuickSell = async (item: SerializedItem, qty: number) => {
-    if (item.quantity < qty || quickPendingId) return;
-    setQuickPendingId(item.id);
+  const addToBasket = (item: SerializedItem, qty: number) => {
     setToastError(null);
-    const fd = new FormData();
-    fd.set("itemId", item.id);
-    fd.set("quantity", String(qty));
-    fd.set("unitPrice", String(item.price));
-    const result = await runAction(() => createSale(fd));
-    if ("error" in result) {
-      setToastError(result.error);
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-      toastTimer.current = setTimeout(() => setToastError(null), 4000);
-    } else {
-      showToast({
-        saleId: result.id,
-        itemName: item.name,
-        quantity: qty,
-        total: item.price * qty,
-      });
-    }
-    setQuickPendingId(null);
+    setCart((prev) => {
+      const next = Math.min(item.quantity, (prev[item.id] ?? 0) + qty);
+      return next > 0 ? { ...prev, [item.id]: next } : prev;
+    });
     setStepperItemId(null);
+  };
+
+  const setBasketQty = (item: SerializedItem, qty: number) => {
+    setCart((prev) => {
+      const next = { ...prev };
+      const clamped = Math.max(0, Math.min(item.quantity, qty));
+      if (clamped === 0) delete next[item.id];
+      else next[item.id] = clamped;
+      return next;
+    });
+  };
+
+  const clearBasket = () => {
+    setCart({});
+    setBasketOpen(false);
+  };
+
+  const recordBasket = () => {
+    if (!basketLines.length || pending) return;
+    const lines = basketLines.map((l) => ({ itemId: l.item.id, quantity: l.quantity }));
+    const label =
+      basketLines.length === 1
+        ? `${basketLines[0].quantity} × ${basketLines[0].item.name}`
+        : `${basketCount} ${t("itemsWord")}`;
+    const total = basketTotal;
+
+    startTransition(async () => {
+      const result = await runAction(() => createSaleBatch(lines));
+      if ("error" in result) {
+        setToastError(result.error);
+        if (toastTimer.current) clearTimeout(toastTimer.current);
+        toastTimer.current = setTimeout(() => setToastError(null), 4000);
+        return;
+      }
+      setCart({});
+      setBasketOpen(false);
+      showToast({ saleIds: result.ids, label, total });
+    });
   };
 
   const handleUndo = () => {
     if (!toast) return;
-    const saleId = toast.saleId;
+    const ids = toast.saleIds;
     setToast(null);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     startTransition(async () => {
-      await runAction(() => deleteSale(saleId));
+      await runAction(() => deleteSales(ids));
     });
   };
 
@@ -300,7 +344,7 @@ export default function SalesView({
           <ul className="grid grid-cols-3 gap-2">
             {items.map((item) => {
               const outOfStock = item.quantity === 0;
-              const isBusy = quickPendingId === item.id;
+              const inBasket = cart[item.id] ?? 0;
               const inStepper = stepperItemId === item.id;
 
               if (inStepper) {
@@ -340,11 +384,10 @@ export default function SalesView({
                       </button>
                       <button
                         type="button"
-                        disabled={isBusy}
-                        onClick={() => handleQuickSell(item, stepperQty)}
+                        onClick={() => addToBasket(item, stepperQty)}
                         className="btn-primary flex-1 px-1 py-1.5 text-[11px]"
                       >
-                        {t("sell")}
+                        {t("add")}
                       </button>
                     </div>
                   </li>
@@ -355,9 +398,11 @@ export default function SalesView({
                 <li key={item.id} className="relative">
                   <button
                     type="button"
-                    onClick={() => handleQuickSell(item, 1)}
-                    disabled={outOfStock || isBusy}
-                    className="card w-full overflow-hidden text-left transition-opacity disabled:opacity-50"
+                    onClick={() => addToBasket(item, 1)}
+                    disabled={outOfStock}
+                    className={`card w-full overflow-hidden text-left transition-opacity disabled:opacity-50 ${
+                      inBasket ? "ring-2 ring-primary" : ""
+                    }`}
                   >
                     <div className="aspect-square w-full bg-cream">
                       {item.image ? (
@@ -382,6 +427,11 @@ export default function SalesView({
                       </p>
                     </div>
                   </button>
+                  {inBasket > 0 && (
+                    <span className="absolute left-1.5 top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-white shadow-sm">
+                      {inBasket}
+                    </span>
+                  )}
                   {outOfStock ? (
                     <span className="absolute right-1.5 top-1.5 rounded-full bg-ink/80 px-2 py-0.5 text-[9px] font-medium text-white">
                       {t("outOfStock")}
@@ -461,6 +511,118 @@ export default function SalesView({
         )}
       </section>
 
+      {/* Keeps the last sale row clear of the fixed basket bar. */}
+      {basketLines.length > 0 && <div className="h-16" aria-hidden />}
+
+      {basketLines.length > 0 && (
+        <div className="fixed inset-x-3 bottom-24 z-30 mx-auto max-w-sm">
+          <div className="flex items-center gap-2 rounded-2xl bg-ink p-2 pl-4 text-white shadow-lg">
+            <button
+              type="button"
+              onClick={() => setBasketOpen(true)}
+              className="min-w-0 flex-1 text-left"
+            >
+              <span className="block text-[11px] text-white/60">
+                {t("basket")} · {basketCount} {t("itemsWord")}
+              </span>
+              <span className="block font-heading text-lg font-semibold">
+                {formatMoney(basketTotal)}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={recordBasket}
+              disabled={pending}
+              className="shrink-0 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-white active:bg-primary-dark disabled:opacity-60"
+            >
+              {pending ? t("saving") : t("recordSaleButton")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {basketOpen && basketLines.length > 0 && (
+        <div
+          className="fixed inset-0 z-40 flex items-end justify-center bg-ink/50 p-3"
+          onClick={() => setBasketOpen(false)}
+        >
+          <div className="card w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="font-heading text-base font-semibold text-ink">{t("basket")}</p>
+              <button
+                type="button"
+                onClick={clearBasket}
+                className="text-xs font-medium text-danger"
+              >
+                {t("clear")}
+              </button>
+            </div>
+
+            <ul className="mb-3 flex max-h-72 flex-col gap-2 overflow-y-auto">
+              {basketLines.map(({ item, quantity }) => (
+                <li
+                  key={item.id}
+                  className="flex items-center gap-2 rounded-xl border border-line p-2"
+                >
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-line bg-cream">
+                    {item.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.image} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-line">
+                        <ImagePlaceholderIcon className="h-4 w-4" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-ink">{item.name}</p>
+                    <p className="text-xs text-muted">{formatMoney(item.price * quantity)}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-label={t("delete")}
+                      onClick={() => setBasketQty(item, quantity - 1)}
+                      className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm font-semibold text-ink"
+                    >
+                      −
+                    </button>
+                    <span className="w-5 text-center text-sm font-semibold text-ink">
+                      {quantity}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={t("add")}
+                      disabled={quantity >= item.quantity}
+                      onClick={() => setBasketQty(item, quantity + 1)}
+                      className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm font-semibold text-ink disabled:opacity-40"
+                    >
+                      +
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex items-center justify-between border-t border-line pt-3">
+              <span className="text-sm text-muted">{t("total")}</span>
+              <span className="font-heading text-lg font-semibold text-ink">
+                {formatMoney(basketTotal)}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={recordBasket}
+              disabled={pending}
+              className="btn-primary mt-3 w-full"
+            >
+              {pending ? t("saving") : t("recordSaleButton")}
+            </button>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <div className="fixed inset-x-4 bottom-24 z-30 mx-auto flex max-w-sm items-center justify-between gap-3 rounded-xl bg-ink px-4 py-3 text-white shadow-lg">
           <span className="flex min-w-0 items-center gap-2 text-sm">
@@ -468,7 +630,7 @@ export default function SalesView({
               <CheckIcon className="h-3 w-3" />
             </span>
             <span className="truncate">
-              {t("sold")} {toast.quantity} × {toast.itemName} · {formatMoney(toast.total)}
+              {t("sold")} {toast.label} · {formatMoney(toast.total)}
             </span>
           </span>
           <button

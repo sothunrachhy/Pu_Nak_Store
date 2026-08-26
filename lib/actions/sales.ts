@@ -101,6 +101,88 @@ export async function createSale(
   }
 }
 
+export type BasketLine = { itemId: string; quantity: number };
+
+// A customer buying several things is one basket, recorded in one
+// transaction: if any line lacks stock the whole thing rolls back, so the
+// shop never ends up with half a sale on the books.
+export async function createSaleBatch(
+  lines: BasketLine[]
+): Promise<{ ids: string[] } | { error: string }> {
+  await requireAuth();
+  if (!lines.length) return { error: "Nothing to record" };
+  for (const line of lines) {
+    if (!line.itemId) return { error: "Item is required" };
+    if (!Number.isInteger(line.quantity) || line.quantity <= 0)
+      return { error: "Invalid quantity" };
+  }
+
+  try {
+    const ids = await prisma.$transaction(async (tx) => {
+      const created: string[] = [];
+      for (const line of lines) {
+        const item = await tx.item.findUnique({ where: { id: line.itemId } });
+        if (!item) throw new Error("Item not found");
+        if (item.quantity < line.quantity) throw new Error("Not enough stock");
+
+        await tx.item.update({
+          where: { id: line.itemId },
+          data: { quantity: item.quantity - line.quantity },
+        });
+
+        const costPrice = Number(item.costPrice);
+        const unitPrice = Number(item.price);
+        const sale = await tx.sale.create({
+          data: {
+            itemId: line.itemId,
+            quantity: line.quantity,
+            unitPrice,
+            total: unitPrice * line.quantity,
+            costPrice,
+            costTotal: costPrice * line.quantity,
+          },
+        });
+        created.push(sale.id);
+      }
+      return created;
+    });
+
+    revalidatePath("/sales");
+    revalidatePath("/items");
+    revalidatePath("/");
+    return { ids };
+  } catch (e) {
+    if (e instanceof Error && (e.message === "Item not found" || e.message === "Not enough stock")) {
+      return { error: e.message };
+    }
+    throw e;
+  }
+}
+
+// Undoing a basket has to put every line's stock back, so it is one
+// transaction too.
+export async function deleteSales(ids: string[]): Promise<ActionResult> {
+  await requireAuth();
+  if (!ids.length) return;
+
+  await prisma.$transaction(async (tx) => {
+    for (const id of ids) {
+      const sale = await tx.sale.findUnique({ where: { id } });
+      if (!sale) continue;
+      await tx.item.update({
+        where: { id: sale.itemId },
+        data: { quantity: { increment: sale.quantity } },
+      });
+      await tx.sale.delete({ where: { id } });
+    }
+  });
+
+  revalidatePath("/sales");
+  revalidatePath("/items");
+  revalidatePath("/");
+  return;
+}
+
 export async function deleteSale(id: string): Promise<ActionResult> {
   await requireAuth();
   await prisma.$transaction(async (tx) => {

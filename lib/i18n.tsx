@@ -4,8 +4,7 @@ import { ACTION_FAILED } from "@/lib/actionError";
 import {
   createContext,
   useContext,
-  useEffect,
-  useState,
+  useSyncExternalStore,
   ReactNode,
 } from "react";
 
@@ -208,19 +207,45 @@ const I18nContext = createContext<I18nContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "app_lang";
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>("en");
+// The chosen language lives in localStorage, which the server cannot read, so
+// it is subscribed to as an external store rather than copied into state by an
+// effect - the effect version re-rendered the whole tree a second time on
+// every load.
+const langListeners = new Set<() => void>();
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as Lang | null;
-    if (stored === "en" || stored === "km") {
-      setLangState(stored);
-    }
-  }, []);
+function subscribeLang(onChange: () => void) {
+  langListeners.add(onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    langListeners.delete(onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function getStoredLang(): Lang {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === "km" ? "km" : "en";
+  } catch {
+    // Private windows and blocked site data throw on access.
+    return "en";
+  }
+}
+
+// The server has no localStorage, so it always renders English.
+function getServerLang(): Lang {
+  return "en";
+}
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const lang = useSyncExternalStore(subscribeLang, getStoredLang, getServerLang);
 
   const setLang = (newLang: Lang) => {
-    setLangState(newLang);
-    localStorage.setItem(STORAGE_KEY, newLang);
+    try {
+      localStorage.setItem(STORAGE_KEY, newLang);
+    } catch {
+      // Not persisting is survivable; the switch still applies for this visit.
+    }
+    langListeners.forEach((notify) => notify());
   };
 
   const t = (key: TranslationKey) => dictionary[lang][key] ?? dictionary.en[key];

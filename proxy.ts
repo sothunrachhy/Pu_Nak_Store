@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const SESSION_COOKIE = "session";
-const PUBLIC_PATHS = ["/login"];
+// iOS fetches the manifest and icons while installing to the home screen,
+// before anyone has a session - they must not redirect to /login.
+const PUBLIC_PATHS = ["/login", "/manifest.webmanifest"];
+const PUBLIC_PREFIXES = ["/_next", "/favicon", "/icon-", "/apple-touch-icon"];
 
 async function sha256Hex(value: string) {
   const data = new TextEncoder().encode(value);
@@ -16,8 +19,7 @@ export async function proxy(request: NextRequest) {
 
   if (
     PUBLIC_PATHS.includes(pathname) ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon")
+    PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   ) {
     return NextResponse.next();
   }

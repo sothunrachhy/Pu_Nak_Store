@@ -24,12 +24,30 @@ const notoSansKhmer = Noto_Sans_Khmer({
 export const metadata: Metadata = {
   title: "Stock Manager",
   description: "Manage stock, sales, and expenses",
+  applicationName: "Stock Manager",
+  // Lets iOS launch the home-screen icon without Safari's chrome.
+  appleWebApp: {
+    capable: true,
+    title: "Stock",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  themeColor: "#b45309",
+  // Draw into the notch and home-indicator areas so the safe-area insets the
+  // header and nav bar use resolve to real values.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

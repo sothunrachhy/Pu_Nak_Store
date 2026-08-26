@@ -20,7 +20,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-surface/90 px-4 py-3 backdrop-blur">
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-surface/90 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur">
         <span className="font-heading text-lg font-semibold text-ink">{t("appName")}</span>
         <div className="flex items-center gap-2">
           <div className="flex overflow-hidden rounded-full border border-line text-xs">
